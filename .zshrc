@@ -107,13 +107,9 @@ export BROWSER="brave"
 
 # Directories
 
-export REPOS="$HOME/Repos"
-export GITUSER="bcalderom"
-export GHREPOS="$REPOS/github.com/$GITUSER"
-export DOTFILES="$GHREPOS/dotfiles"
-#export LAB="$GHREPOS/lab"
+export DOTFILES="~/dotfiles"
 export SCRIPTS="$DOTFILES/scripts"
-#export ICLOUD="$HOME/icloud"
+#export CLOUD="$HOME/cloud"
 #export ZETTELKASTEN="$HOME/Zettelkasten"
 
 # Aliases
@@ -158,13 +154,9 @@ alias vic="vim ~/.vimrc"
 alias zrc="nvim ~/.zshrc"
 
 # cd directories
-alias scripts='cd $SCRIPTS'
+alias dot='cd ~/dotfiles'
+alias scripts='cd ~/dotfiles/scripts/'
 #alias icloud="cd \$ICLOUD"
-#alias lab='cd $LAB'
-alias dot='cd $GHREPOS/dotfiles'
-alias repos='cd $REPOS'
-alias ghrepos='cd $GHREPOS'
-alias gr='ghrepos'
 
 # Changing "ls" to "eza"
 alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
