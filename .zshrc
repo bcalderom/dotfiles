@@ -142,8 +142,14 @@ alias jctl="sudo journalctl -p 3 -xb"
 alias mkdir='mkdir -pv'
 
 # git
-alias gp='git pull'
 alias gs='git status'
+alias ga='git add'
+alias gau='git add -u'
+alias gaa='git add -A'
+alias gc='git commit -m'
+alias push='git push origin'
+alias gl='git log'
+alias gls='git log --oneline'
 alias lg='lazygit'
 
 # packman
