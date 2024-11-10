@@ -141,6 +141,11 @@ alias jctl="sudo journalctl -p 3 -xb"
 # mkdir
 alias mkdir='mkdir -pv'
 
+# git
+alias gp='git pull'
+alias gs='git status'
+alias lg='lazygit'
+
 # packman
 alias syu='sudo pacman -Syu'
 alias rns='sudo pacman -Rns'
