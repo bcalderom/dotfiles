@@ -130,7 +130,8 @@ alias t='tmux'
 alias cat='bat'
 
 # ps
-alias psa="ps auxf"
+alias psg="ps aux | grep -v grep | grep -i"
+alias pst="ps auxf"
 alias psgrep="ps aux | grep -v grep | grep -i -e VSZ -e"
 alias psmem='ps aux --sort -pmem | head -11'
 alias pscpu='ps aux --sort -pcpu | head -11'

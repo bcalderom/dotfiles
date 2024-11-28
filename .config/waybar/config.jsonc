@@ -13,6 +13,6 @@
   },
   "clock": {
     "format": "<span>   </span>{:%A, %b %d  %H:%M}",
-    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>"
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><large>{calendar}</large></tt>"
   }
 }
