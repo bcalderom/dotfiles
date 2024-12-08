@@ -198,3 +198,6 @@ eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
 
 alias cd="z"
+
+# RDP connection to Invexsa's laptop
+alias ivx='xfreerdp3 /args-from:ivxrdp'
