@@ -48,6 +48,7 @@ zinit cdreplay -q
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
+typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
 
 # Keybindings
 #bindkey -v   # This sets the keymap to Vi mode
@@ -154,8 +155,12 @@ alias gls='git log --oneline'
 alias lg='lazygit'
 
 # packman
+alias pacs='sudo pacman -S'
 alias syu='sudo pacman -Syu'
 alias rns='sudo pacman -Rns'
+
+# yay
+alias yay='yes | yay -Syu'
 
 # finds all files recursively and sorts by last modification, ignore hidden files
 alias lastmod='find . -type f -not -path "*/\.*" -exec ls -lrt {} +'
@@ -168,6 +173,7 @@ alias zrc="nvim ~/.zshrc"
 # cd directories
 alias dot='cd ~/dotfiles'
 alias scripts='cd ~/dotfiles/scripts/'
+alias anime='cd /data/streaming/anime/'
 #alias icloud="cd \$ICLOUD"
 
 # Changing "ls" to "eza"
@@ -176,7 +182,6 @@ alias la='eza -ag --color=always --group-directories-first' # all files and dirs
 alias ll='eza -lg --color=always --group-directories-first' # long format
 alias lt='eza -agT --color=always --group-directories-first' # tree listing
 alias l.='eza -ag | egrep "^\."'
-
 
 # Bluetooth
 
@@ -200,4 +205,26 @@ eval "$(zoxide init zsh)"
 alias cd="z"
 
 # RDP connection to Invexsa's laptop
-alias ivx='xfreerdp3 /args-from:ivxrdp'
+alias ivx='xfreerdp3 /args-from:ivxrdp &'
+
+# k8s
+export KUBECONFIG=~/.kube/config
+
+alias k='kubectl'
+alias kx='kubectl ctx'
+alias kn='kubectl ns'
+alias kgp='kubectl get pods'
+
+# Enable zsh autocompletion
+autoload -U compinit
+compinit
+
+# Add zsh completion specifically for kubectl
+source <(kubectl completion zsh)
+
+# Enable autocompletion for the alias 'k' using kubectl's completion logic
+compdef __start_kubectl k
+
+### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
+export PATH="/home/boris/.rd/bin:$PATH"
+### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
