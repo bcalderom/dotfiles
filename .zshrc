@@ -160,7 +160,8 @@ alias syu='sudo pacman -Syu'
 alias rns='sudo pacman -Rns'
 
 # yay
-alias yay='yes | yay -Syu'
+#alias yay='yes | yay -Syu'
+alias yayu='yay -Syu'
 
 # finds all files recursively and sorts by last modification, ignore hidden files
 alias lastmod='find . -type f -not -path "*/\.*" -exec ls -lrt {} +'
