@@ -80,6 +80,14 @@ zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
 
+
+# ~~~~~~~~~~~~~~~ ls function ~~~~~~~~~~~~~~~~~~~~~~~~
+
+ls() {
+  command ls --group-directories-first --color=auto "$@"
+}
+
+
 # ~~~~~~~~~~~~~~~ Path configuration ~~~~~~~~~~~~~~~~~~~~~~~~
 
 setopt extended_glob null_glob
@@ -88,7 +96,7 @@ path=(
     $path                           # Keep existing PATH entries
     $HOME/bin
     $HOME/.local/bin
-    $SCRIPTS
+    $HOME/dotfiles/scripts
 )
 
 # Remove duplicate entries and non-existent directories
@@ -106,14 +114,12 @@ export EDITOR=nvim
 
 export BROWSER="brave"
 
-# Directories
 
-export DOTFILES="~/dotfiles"
-export SCRIPTS="$DOTFILES/scripts"
-#export CLOUD="$HOME/cloud"
-#export ZETTELKASTEN="$HOME/Zettelkasten"
+# ~~~~~~~~~~~~~~~ Aliases ~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Aliases
+# Quick keyboard layout switch aliases
+alias kmus='hyprctl keyword input:kb_layout us && echo "KB: us"'
+alias kmes='hyprctl keyword input:kb_layout es && echo "KB: es"'
 
 # ss
 alias vt='sudo ss -lntp'        # TCP listening ports
@@ -128,7 +134,6 @@ alias lsmount='mount | column -t'
 alias h='history'
 alias c='clear'
 alias t='tmux'
-alias cat='bat'
 
 # ps
 alias psg="ps aux | grep -v grep | grep -i"
@@ -154,7 +159,7 @@ alias gl='git log'
 alias gls='git log --oneline'
 alias lg='lazygit'
 
-# packman
+# pacman
 alias pacs='sudo pacman -S'
 alias syu='sudo pacman -Syu'
 alias rns='sudo pacman -Rns'
@@ -163,8 +168,10 @@ alias rns='sudo pacman -Rns'
 #alias yay='yes | yay -Syu'
 alias yayu='yay -Syu'
 
+# Finding files
 # finds all files recursively and sorts by last modification, ignore hidden files
 alias lastmod='find . -type f -not -path "*/\.*" -exec ls -lrt {} +'
+alias ef='nvim $(fzf --height 40% )'
 
 # editors
 alias v='nvim'
@@ -174,23 +181,29 @@ alias zrc="nvim ~/.zshrc"
 # cd directories
 alias dot='cd ~/dotfiles'
 alias scripts='cd ~/dotfiles/scripts/'
+alias hypr='v ~/dotfiles/.config/hypr/hyprland.conf' 
 alias anime='cd /data/streaming/anime/'
+alias special='cd ~/Videos/special/'
 #alias icloud="cd \$ICLOUD"
 
 # Changing "ls" to "eza"
-alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
-alias la='eza -ag --color=always --group-directories-first' # all files and dirs
-alias ll='eza -lg --color=always --group-directories-first' # long format
-alias lt='eza -agT --color=always --group-directories-first' # tree listing
-alias l.='eza -ag | egrep "^\."'
+# alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
+# alias la='eza -ag --color=always --group-directories-first' # all files and dirs
+# alias ll='eza -lg --color=always --group-directories-first' # long format
+# alias lt='eza -agT --color=always --group-directories-first' # tree listing
+# alias l.='eza -ag | egrep "^\."'
 
 # Bluetooth
 
 alias bton='sudo systemctl start bluetooth'
 alias btoff='sudo systemctl stop bluetooth'
+alias btr='sudo systemctl restart bluetooth'
 
 # JBL Charge 5
 alias btj='bluetoothctl connect 10:28:74:E6:AC:EC'
+
+# Ergonomic keyboard
+alias btk='bluetoothctl connect 45:28:60:00:01:56'
 
 # Sony WF-1000XM5
 #alias btm='bluetoothctl connect 
@@ -203,7 +216,7 @@ eval $(thefuck --alias fk)
 eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
 
-alias cd="z"
+#alias cd="z"
 
 # RDP connection to Invexsa's laptop
 alias ivx='xfreerdp3 /args-from:ivxrdp &'
@@ -217,8 +230,8 @@ alias kn='kubectl ns'
 alias kgp='kubectl get pods'
 
 # Enable zsh autocompletion
-autoload -U compinit
-compinit
+#autoload -U compinit
+#compinit
 
 # Add zsh completion specifically for kubectl
 source <(kubectl completion zsh)

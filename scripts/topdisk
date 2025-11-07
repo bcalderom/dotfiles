@@ -1,0 +1,100 @@
+#!/usr/bin/env zsh
+
+topdisk() {
+  # Interactive disk usage explorer with caching and empty-dir detection.
+  #
+  # Usage:
+  #   topdisk [path] [depth] [--refresh]
+  #
+  # Dependencies: fzf, du, sort, ls, md5sum, clear, cat
+
+  # ---- Declare full binary paths ----
+  local CD_BIN="/usr/bin/cd"
+  local DU_BIN="/usr/bin/du"
+  local SORT_BIN="/usr/bin/sort"
+  local LS_BIN="/usr/bin/ls"
+  local CAT_BIN="/usr/bin/cat"
+  local MD5_BIN="/usr/bin/md5sum"
+  local FZF_BIN="/usr/bin/fzf"
+  local CLEAR_BIN="/usr/bin/clear"
+  local FIND_BIN="/usr/bin/find"
+
+  # ---- Function parameters ----
+  local start_path="${1:-$PWD}"
+  local depth="${2:-1}"
+  local refresh=false
+  [[ "$3" == "--refresh" ]] && refresh=true
+
+  local cache_dir="$HOME/.cache/topdisk"
+  mkdir -p "$cache_dir"
+
+  local explore_dir="$start_path"
+
+  while true; do
+    $CLEAR_BIN
+    echo "📊 Scanning: $explore_dir (depth: $depth)"
+    echo "-----------------------------------------------------------"
+
+    # ---- Generate cache key ----
+    local cache_key
+    cache_key=$($MD5_BIN <<<"${explore_dir}_${depth}" | cut -d' ' -f1)
+    local cache_file="${cache_dir}/${cache_key}.txt"
+
+    # ---- Load or refresh cache ----
+    if [[ -f "$cache_file" && "$refresh" = false ]]; then
+      echo "⚡ Using cached data: $cache_file"
+    else
+      echo "⏳ Generating new scan..."
+      sudo $DU_BIN -ah -x --max-depth="$depth" "$explore_dir" 2>/dev/null |
+        $SORT_BIN -rh >"$cache_file"
+      echo "✅ Cache saved: $cache_file"
+    fi
+
+    echo
+    echo "Use ↑↓ to navigate, Enter to open directory, ESC to quit."
+    echo
+
+    # ---- Handle empty directory case ----
+    if [[ ! -s "$cache_file" ]]; then
+      echo "📁 Directory is empty."
+      echo
+      read "?Press Enter to return to the previous directory or exit..."
+      break
+    fi
+
+    # ---- fzf interactive navigation ----
+    local selection
+    selection=$($CAT_BIN "$cache_file" | $FZF_BIN \
+      --prompt="Select file or directory > " \
+      --height=90% --reverse \
+      --preview="p={}; p=\$(printf '%s\n' \"\$p\" | cut -f2-); if [[ -d \"\$p\" ]]; then $LS_BIN -lhtr --color=always \"\$p\"; else $LS_BIN -lh --color=always \"\$p\"; fi" \
+      --preview-window=right:60%)
+
+    [[ -z "$selection" ]] && echo "👋 Exiting." && break
+
+    local selected_path="$(printf '%s\n' "$selection" | cut -f2-)"
+
+    $CLEAR_BIN
+    echo "📂 Selected: $selected_path"
+    echo "-----------------------------------------------------------"
+
+    # ---- Action based on selection ----
+    if [[ -d "$selected_path" ]]; then
+      # Check if directory is empty before entering
+      if [[ -z $($FIND_BIN "$selected_path" -mindepth 1 -print -quit 2>/dev/null) ]]; then
+        echo "📁 Directory is empty."
+        echo
+        read "?Press Enter to return..."
+      else
+        explore_dir="$selected_path"
+        refresh=false # reuse cache for subdirectories
+      fi
+    else
+      $LS_BIN -lh "$selected_path"
+      echo
+      read "?Press Enter to return..."
+    fi
+  done
+}
+
+topdisk "$@"
