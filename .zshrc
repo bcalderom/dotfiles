@@ -21,6 +21,13 @@ fi
 # Source/Load zinit
 source "${ZINIT_HOME}/zinit.zsh"
 
+# Prevent zsh-vi-mode from overriding Zsh/fzf keybindings.
+# Without these, zsh-vi-mode rebinds keys at the end of initialization,
+# which breaks fzf's reverse search (Ctrl+r) and other custom widgets.
+export ZVM_INIT_MODE=sourcing
+export ZVM_READKEY_READTYPE=0
+export ZVM_READKEY_BINDKEYS=0
+
 # Add in Powerlevel10k
 zinit ice depth=1; zinit light romkatv/powerlevel10k
 
@@ -149,12 +156,8 @@ alias jctl="sudo journalctl -p 3 -xb"
 alias mkdir='mkdir -pv'
 
 # git
+alias gp='git pull'
 alias gs='git status'
-alias ga='git add'
-alias gau='git add -u'
-alias gaa='git add -A'
-alias gc='git commit -m'
-alias push='git push origin'
 alias gl='git log'
 alias gls='git log --oneline'
 alias lg='lazygit'
@@ -178,6 +181,9 @@ alias v='nvim'
 alias vic="vim ~/.vimrc"
 alias zrc="nvim ~/.zshrc"
 
+# ls
+alias la='ls -lahtr'
+
 # cd directories
 alias dot='cd ~/dotfiles'
 alias scripts='cd ~/dotfiles/scripts/'
@@ -200,7 +206,8 @@ alias btoff='sudo systemctl stop bluetooth'
 alias btr='sudo systemctl restart bluetooth'
 
 # JBL Charge 5
-alias btj='bluetoothctl connect 10:28:74:E6:AC:EC'
+alias btjc='bluetoothctl connect 10:28:74:E6:AC:EC'
+alias btjd='bluetoothctl disconnect 10:28:74:E6:AC:EC'
 
 # Ergonomic keyboard
 alias btk='bluetoothctl connect 45:28:60:00:01:56'
@@ -215,8 +222,6 @@ eval $(thefuck --alias fk)
 # Shell integrations
 eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
-
-#alias cd="z"
 
 # RDP connection to Invexsa's laptop
 alias ivx='xfreerdp3 /args-from:ivxrdp &'
