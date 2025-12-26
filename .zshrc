@@ -213,34 +213,34 @@ alias btk='bluetoothctl connect 45:28:60:00:01:56'
 #alias btm='bluetoothctl connect 
 
 # thefuck alias
-eval $(thefuck --alias)
-eval $(thefuck --alias fk)
+#eval $(thefuck --alias)
+#eval $(thefuck --alias fk)
 
 # Shell integrations
 eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
 
 # RDP connection to Invexsa's laptop
-alias ivx='xfreerdp3 /args-from:ivxrdp &'
+#alias ivx='xfreerdp3 /args-from:ivxrdp &'
 
 # k8s
-export KUBECONFIG=~/.kube/config
+#export KUBECONFIG=~/.kube/config
 
-alias k='kubectl'
-alias kx='kubectl ctx'
-alias kn='kubectl ns'
-alias kgp='kubectl get pods'
+#alias k='kubectl'
+#alias kx='kubectl ctx'
+#alias kn='kubectl ns'
+#alias kgp='kubectl get pods'
 
 # Enable zsh autocompletion
 #autoload -U compinit
 #compinit
 
 # Add zsh completion specifically for kubectl
-source <(kubectl completion zsh)
+#source <(kubectl completion zsh)
 
 # Enable autocompletion for the alias 'k' using kubectl's completion logic
-compdef __start_kubectl k
+#compdef __start_kubectl k
 
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
-export PATH="/home/boris/.rd/bin:$PATH"
+#export PATH="/home/boris/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
