@@ -56,5 +56,7 @@ create_symlinks "${common_items[@]}"
 # Arch Linux
 
 # pacman packages:
-sudo pacman -Syu zsh zsh-completions ttf-ubuntu-mono-nerd fzf npm unzip tmux ripgrep fd neovim wl-clipboard rofi zoxide ttf-jetbrains-mono-nerd mpv yazi ffmpeg git stow
+sudo pacman -Syu zsh zsh-completions ttf-ubuntu-mono-nerd fzf npm unzip tmux ripgrep fd neovim wl-clipboard rofi zoxide ttf-jetbrains-mono-nerd mpv yazi ffmpeg git stow hyprland alacritty waybar mako brightnessctl bluez bluez-utils 
+
+sudo pacman -S xdg-desktop-portal-hyprland xdg-desktop-portal wayland wayland-protocols wl-clipboard qt5-wayland qt6-wayland grim slurp polkit polkit-gnome
 # sudo pacman -Syu grim slurp swappy tldr thefuck bat
