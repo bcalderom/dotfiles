@@ -188,9 +188,6 @@ alias la='ls -lahtr'
 alias dot='cd ~/dotfiles'
 alias scripts='cd ~/dotfiles/scripts/'
 alias hypr='v ~/dotfiles/.config/hypr/hyprland.conf' 
-alias anime='cd /data/streaming/anime/'
-alias special='cd ~/Videos/special/'
-#alias icloud="cd \$ICLOUD"
 
 # Changing "ls" to "eza"
 # alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
