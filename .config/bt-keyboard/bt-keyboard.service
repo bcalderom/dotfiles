@@ -1,0 +1,15 @@
+# /etc/systemd/system/bt-keyboard.service
+[Unit]
+Description=Auto-connect Bluetooth keyboard
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/bluetooth/autoconnect.env
+ExecStart=/usr/bin/bash -c '/usr/bin/bluetoothctl connect "${BT_DEVICE_MAC}" || true'
+TimeoutStartSec=10s
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
