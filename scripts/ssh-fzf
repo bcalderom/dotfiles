@@ -1,0 +1,456 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ssh-fzf: user-friendly SSH launcher for ~/.ssh/config using fzf
+#
+# Features:
+# - Parses Host / HostName / User stanzas
+# - Prettified columns in fzf (aligned display)
+# - Preview pane with safe parsing (no broken quoting)
+# - Alias grouping safely shown in preview (other aliases with same HostName)
+# - Actions:
+#   Enter     -> ssh <alias>
+#   Ctrl-S    -> scp (interactive prompts)
+#   Ctrl-R    -> rsync (interactive prompts)
+#   Ctrl-T    -> tmux new-window (if inside tmux) else ssh
+#   Ctrl-P    -> ping/port test (quick connectivity)
+#   Ctrl-K    -> copy "ssh <alias>"
+#   Ctrl-U    -> copy "user@hostname"
+#   Ctrl-I    -> copy "hostname"
+#   Ctrl-E    -> open ssh config in $EDITOR
+# - MRU sorting via history file (~/.cache/ssh-fzf-history)
+# - Optional collapsed view (one row per HostName, then pick alias)
+
+CONFIG="${HOME}/.ssh/config"
+COLLAPSED=0
+FILTER_GROUP=""
+INITIAL_QUERY=""
+
+SELF_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+
+usage() {
+  cat <<'EOF'
+Usage: ssh-fzf [options] [alias]
+
+Options:
+  -c, --config PATH     SSH config file (default: ~/.ssh/config)
+  --collapsed           Collapse by HostName (then choose alias for that host)
+  -g, --group NAME      Filter by group prefix (e.g., wisemin, cenizas)
+  -q, --query TEXT      Initial fzf query
+  -h, --help            Show help
+
+Keys (in selector):
+  Enter   ssh
+  Ctrl-S  scp
+  Ctrl-R  rsync
+  Ctrl-T  tmux new-window (if inside tmux)
+  Ctrl-P  ping/port test
+  Ctrl-K  copy "ssh <alias>"
+  Ctrl-U  copy "user@hostname"
+  Ctrl-I  copy "hostname"
+  Ctrl-E  edit ssh config
+EOF
+}
+
+need_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+editor() { echo "${EDITOR:-vi}"; }
+
+hist_file() { echo "${XDG_CACHE_HOME:-$HOME/.cache}/ssh-fzf-history"; }
+
+ensure_deps() {
+  need_cmd fzf || die "fzf not found. Install fzf first."
+  need_cmd ssh || die "ssh not found."
+}
+
+# Parse ssh config into TSV:
+# alias \t hostname \t user \t group \t role \t variant
+parse_config() {
+  local cfg="$1"
+  [[ -f "$cfg" ]] || die "Config not found: $cfg"
+
+  awk '
+    function trim(s){
+      gsub(/\r/,"",s)
+      sub(/^[ \t]+/,"",s); sub(/[ \t]+$/,"",s);
+      return s
+    }
+    function flush(aliases, hostname, user,   n, a, parts, i, grp, role, variant, j, parts2) {
+      if (aliases=="" || hostname=="" || user=="") return
+      n = split(aliases, parts, " ")
+      for (i=1; i<=n; i++) {
+        a = parts[i]
+        if (a=="" || a=="*") continue
+        split(a, parts2, "_")
+        grp = (length(parts2[1]) ? parts2[1] : "")
+        role = (length(parts2[2]) ? parts2[2] : "")
+        variant=""
+        if (length(parts2[3])) {
+          variant=parts2[3]
+          for (j=4; j in parts2; j++) variant = variant "_" parts2[j]
+        }
+        print a "\t" hostname "\t" user "\t" grp "\t" role "\t" variant
+      }
+    }
+
+    BEGIN { aliases=""; hostname=""; user="" }
+
+    { gsub(/\r/,"",$0) }         # <-- kill CR everywhere
+
+    /^[ \t]*#/ { next }
+    /^[ \t]*$/ { next }
+
+    /^[ \t]*Host[ \t]+/ {
+      flush(aliases, hostname, user)
+      line=$0
+      sub(/^[ \t]*Host[ \t]+/,"",line)
+      line=trim(line)
+      gsub(/[ \t]+/," ",line)
+      aliases=line
+      hostname=""; user=""
+      next
+    }
+
+    /^[ \t]*HostName[ \t]+/ {
+      line=$0; sub(/^[ \t]*HostName[ \t]+/,"",line)
+      hostname=trim(line)
+      next
+    }
+
+    /^[ \t]*User[ \t]+/ {
+      line=$0; sub(/^[ \t]*User[ \t]+/,"",line)
+      user=trim(line)
+      next
+    }
+
+    END { flush(aliases, hostname, user) }
+  ' "$cfg"
+}
+
+# Sort entries by MRU history (most recent first), then alphabetically.
+sort_by_history() {
+  local hist
+  hist="$(hist_file)"
+  mkdir -p "$(dirname "$hist")" 2>/dev/null || true
+  touch "$hist" 2>/dev/null || true
+
+  awk -F'\t' -v HIST="$hist" '
+    BEGIN {
+      while ((getline line < HIST) > 0) {
+        gsub(/\r/,"",line)
+        if (line!="") order[++n]=line
+      }
+      close(HIST)
+      for (i=1; i<=n; i++) {
+        alias=order[i]
+        rank[alias]=n-i
+      }
+    }
+    {
+      a=$1
+      r = (a in rank ? rank[a] : 999999)
+      print r "\t" $0
+    }
+  ' | sort -t$'\t' -k1,1n -k2,2 | cut -f2-
+}
+
+update_history() {
+  local alias="$1"
+  local hist
+  hist="$(hist_file)"
+  mkdir -p "$(dirname "$hist")" 2>/dev/null || true
+  touch "$hist" 2>/dev/null || true
+  awk -v A="$alias" '$0!=A && $0!="" {print} END{print A}' "$hist" > "${hist}.tmp" && mv "${hist}.tmp" "$hist"
+}
+
+clipboard_copy() {
+  local text="$1"
+  if need_cmd pbcopy; then
+    printf "%s" "$text" | pbcopy
+    return 0
+  elif need_cmd wl-copy; then
+    printf "%s" "$text" | wl-copy
+    return 0
+  elif need_cmd xclip; then
+    printf "%s" "$text" | xclip -selection clipboard
+    return 0
+  elif need_cmd xsel; then
+    printf "%s" "$text" | xsel --clipboard --input
+    return 0
+  fi
+  return 1
+}
+
+port_test() {
+  local host="$1"
+  if need_cmd nc; then
+    nc -z -w 2 "$host" 22 >/dev/null 2>&1 && echo "✅ TCP 22 open on $host" || echo "❌ TCP 22 closed/unreachable on $host"
+  else
+    timeout 2 bash -c ">/dev/tcp/$host/22" >/dev/null 2>&1 && echo "✅ TCP 22 open on $host" || echo "❌ TCP 22 closed/unreachable on $host"
+  fi
+}
+
+# Internal dump mode: base TSV without display formatting
+dump_mode() {
+  local cfg="$1"
+  parse_config "$cfg" | sort_by_history
+}
+
+# Build prettified display while keeping raw fields:
+# display \t alias \t hostname \t user \t group \t role \t variant
+build_display_rows() {
+  awk -F$'\t' '
+    BEGIN {
+      client_w=12; server_w=14; var_w=12;
+    }
+    {
+      alias=$1; host=$2; user=$3; client=$4; server=$5; variant=$6;
+      if (variant=="") variant="-";
+
+      display = sprintf("%-*s  %-*s  %-*s",
+                        client_w, client, server_w, server, var_w, variant)
+
+      # Keep raw fields for actions/preview
+      print display "\t" alias "\t" host "\t" user "\t" client "\t" server "\t" variant
+    }
+  '
+}
+
+# Safe preview: parse fields from the selected row (display + raw fields),
+# then list other aliases sharing the same HostName (via --_dump) using bash loops (no awk quoting traps).
+preview_cmd() {
+  local cfg="$1"
+  local self="$SELF_PATH"
+  cat <<EOF
+bash -c '
+  IFS=\$'\''\t'\'' read -r display alias host user client server variant <<< "\$1"
+
+  echo "Client:     \$client"
+  echo "Server:     \$server"
+  echo "Variant:    \${variant:-"-"}"
+  echo
+  echo "SSH alias:"
+  echo "  \$alias"
+  echo "Command:"
+  echo "  ssh \$alias"
+  echo
+
+  echo "Other aliases on same HostName:"
+  found=0
+  while IFS=\$'\''\t'\'' read -r a h u g r v; do
+    [[ "\$h" == "\$host" ]] || continue
+    [[ "\$a" == "\$alias" ]] && continue
+    printf "  - %s (%s)\\n" "\$a" "\$u"
+    found=1
+  done < <("\$self" --_dump "$cfg" 2>/dev/null || true)
+
+  [[ "\$found" -eq 1 ]] || echo "  (none)"
+' _ "{}" "$cfg" "$self"
+EOF
+}
+
+collapsed_view() {
+  # Input: base TSV (alias host user grp role variant)
+  # Output: host \t users \t groups \t roles \t aliases
+  awk -F'\t' '
+    function adduniq(map, key, val,   k) {
+      k=key SUBSEP val
+      if (!(k in seen)) { seen[k]=1; map[key] = map[key] (map[key]=="" ? "" : ", ") val }
+      return map[key]
+    }
+    {
+      host=$2; user=$3; grp=$4; role=$5; alias=$1
+      users[host]=adduniq(users, host, user)
+      grps[host]=adduniq(grps, host, grp)
+      roles[host]=adduniq(roles, host, role)
+      aliases[host]=aliases[host] (aliases[host]=="" ? "" : ", ") alias
+    }
+    END {
+      for (h in aliases) {
+        printf "%s\t%s\t%s\t%s\t%s\n", h, users[h], grps[h], roles[h], aliases[h]
+      }
+    }
+  ' | sort
+}
+
+pick_alias_for_host() {
+  local host="$1"
+  local cfg="$2"
+  local list sel
+  list="$(dump_mode "$cfg" | awk -F$'\t' -v H="$host" '$2==H{print}')"
+  [[ -n "$list" ]] || return 1
+
+  # Build display rows for this host subset
+  sel="$(printf "%s\n" "$list" | build_display_rows | fzf \
+    --prompt="Alias for ${host}> " \
+    --delimiter=$'\t' \
+    --with-nth=1 \
+    --preview="$(preview_cmd "$cfg")" \
+    --preview-window=right:60%:wrap \
+  )" || return 1
+
+  printf "%s" "$sel"
+}
+
+run_action() {
+  local action="$1"
+  local alias="$2"
+  local host="$3"
+  local user="$4"
+  local cfg="$5"
+
+  update_history "$alias"
+
+  case "$action" in
+    enter|"")
+      exec ssh "$alias"
+      ;;
+    ctrl-t)
+      if [[ -n "${TMUX:-}" ]] && need_cmd tmux; then
+        tmux new-window -n "$alias" "ssh $alias"
+        exit 0
+      else
+        exec ssh "$alias"
+      fi
+      ;;
+    ctrl-k)
+      if clipboard_copy "ssh $alias"; then
+        echo "Copied: ssh $alias"
+      else
+        echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
+      fi
+      ;;
+    ctrl-u)
+      if clipboard_copy "${user}@${host}"; then
+        echo "Copied: ${user}@${host}"
+      else
+        echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
+      fi
+      ;;
+    ctrl-i)
+      if clipboard_copy "${host}"; then
+        echo "Copied: ${host}"
+      else
+        echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
+      fi
+      ;;
+    ctrl-e)
+      exec "$(editor)" "$cfg"
+      ;;
+    ctrl-p)
+      port_test "$host"
+      ;;
+    ctrl-s)
+      echo "SCP mode for $alias ($user@$host)"
+      read -r -e -p "Local path: " local_path
+      read -r -e -p "Remote path (relative to ~ on remote, or absolute): " remote_path
+      if [[ "$remote_path" == /* ]]; then
+        exec scp -r -- "$local_path" "${alias}:${remote_path}"
+      else
+        exec scp -r -- "$local_path" "${alias}:~/${remote_path}"
+      fi
+      ;;
+    ctrl-r)
+      echo "RSYNC mode for $alias ($user@$host)"
+      read -r -e -p "Local path: " local_path
+      read -r -e -p "Remote path (relative to ~ on remote, or absolute): " remote_path
+      if [[ "$remote_path" == /* ]]; then
+        exec rsync -avz --progress -- "$local_path" "${alias}:${remote_path}"
+      else
+        exec rsync -avz --progress -- "$local_path" "${alias}:~/${remote_path}"
+      fi
+      ;;
+    *)
+      die "Unknown action: $action"
+      ;;
+  esac
+}
+
+main() {
+  ensure_deps
+
+  # Hidden/internal option for preview helper
+  if [[ "${1:-}" == "--_dump" ]]; then
+    shift
+    dump_mode "${1:-$CONFIG}"
+    exit 0
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -c|--config) CONFIG="${2:-}"; shift 2 ;;
+      --collapsed) COLLAPSED=1; shift ;;
+      -g|--group) FILTER_GROUP="${2:-}"; shift 2 ;;
+      -q|--query) INITIAL_QUERY="${2:-}"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      --) shift; break ;;
+      -*)
+        die "Unknown option: $1"
+        ;;
+      *)
+        exec ssh "$1"
+        ;;
+    esac
+  done
+
+  local base data
+  base="$(dump_mode "$CONFIG")"
+
+  if [[ -n "$FILTER_GROUP" ]]; then
+    base="$(printf "%s\n" "$base" | awk -F$'\t' -v G="$FILTER_GROUP" '$4==G{print}')"
+  fi
+
+  [[ -n "$base" ]] || die "No SSH hosts found (check config: $CONFIG)"
+
+  if [[ "$COLLAPSED" -eq 1 ]]; then
+    # host \t users \t groups \t roles \t aliases
+    local collapsed sel host
+    collapsed="$(printf "%s\n" "$base" | collapsed_view)"
+    sel="$(printf "%s\n" "$collapsed" | fzf \
+      --prompt="HostName> " \
+      --query="$INITIAL_QUERY" \
+      --delimiter=$'\t' \
+      --with-nth=1,2,3,4 \
+      --preview='bash -c '"'"'
+        IFS=$"\t" read -r host users grps roles aliases <<< "$1"
+        echo "HostName: $host"
+        echo "Users:    $users"
+        echo "Groups:   $grps"
+        echo "Roles:    $roles"
+        echo
+        echo "Aliases:"
+        printf "%s\n" "$aliases" | tr "," "\n" | sed "s/^/  - /"
+      '"'"' _ "{}"' \
+      --preview-window=right:60%:wrap \
+    )" || exit 0
+
+    host="$(printf "%s" "$sel" | cut -f1)"
+    data="$(pick_alias_for_host "$host" "$CONFIG")" || exit 0
+  else
+    data="$(printf "%s\n" "$base" | build_display_rows)"
+  fi
+
+  local selection keys line action display alias host user grp role variant
+  selection="$(printf "%s\n" "$data" | fzf \
+    --prompt="SSH> " \
+    --query="$INITIAL_QUERY" \
+    --delimiter=$'\t' \
+    --with-nth=1 \
+    --expect=enter,ctrl-s,ctrl-r,ctrl-t,ctrl-p,ctrl-k,ctrl-u,ctrl-i,ctrl-e \
+    --preview="$(preview_cmd "$CONFIG")" \
+    --preview-window=right:60%:wrap \
+    --header=$'Enter: ssh | Ctrl-S: scp | Ctrl-R: rsync | Ctrl-T: tmux | Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host | Ctrl-I: copy host | Ctrl-E: edit' \
+  )" || exit 0
+
+  keys="$(printf "%s\n" "$selection" | sed -n '1p')"
+  line="$(printf "%s\n" "$selection" | sed -n '2p')"
+
+  action="$keys"
+
+  IFS=$'\t' read -r display alias host user grp role variant <<< "$line"
+  run_action "$action" "$alias" "$host" "$user" "$CONFIG"
+}
+
+main "$@"
