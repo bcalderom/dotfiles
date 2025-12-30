@@ -1,18 +1,61 @@
 {
   "position": "top",
-  "modules-left": ["hyprland/workspaces"],
-  "modules-center": ["hyprland/window"],
-  "modules-right": ["pulseaudio", "clock"],
+  "modules-left": [
+    "hyprland/workspaces"
+  ],
+  "modules-center": [
+    "hyprland/window"
+  ],
+  "modules-right": [
+    "power-profiles-daemon",
+    "pulseaudio",
+    "battery",
+    "clock"
+  ],
   "pulseaudio": {
-      "format": "{icon}  {volume}%",
-      "format-muted": "",
-      "format-icons": {
-          "default": ["", "", " "]
-      },
-      "on-click": "pavucontrol"
+    "format": "{icon}  {volume}%",
+    "format-muted": "",
+    "format-icons": {
+      "default": [
+        "",
+        "",
+        " "
+      ]
+    },
+    "on-click": "pavucontrol"
+  },
+  "battery": {
+    "states": {
+      "warning": 30,
+      "critical": 15
+    },
+    "format": "",
+    "format-charging": " {capacity}%",
+    "format-discharging": "{capacity}% {icon}",
+    "format-plugged": "",
+    "format-full": "",
+    "format-not-charging": "",
+    "format-icons": [
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "tooltip": true
+  },
+  "power-profiles-daemon": {
+    "format": "{icon}",
+    "tooltip": true,
+    "format-icons": {
+      "default": "",
+      "performance": "",
+      "balanced": "",
+      "power-saver": ""
+    }
   },
   "clock": {
     "format": "<span>   </span>{:%A, %b %d  %H:%M}",
-    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><large>{calendar}</large></tt>"
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><span size=\"large\">{calendar}</span></tt>"
   }
 }

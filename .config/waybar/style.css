@@ -19,11 +19,12 @@ window#waybar {
 }
 
 tooltip {
-  background: rgba(43, 48, 59, 0.5);
-  border: 1px solid rgba(100, 114, 125, 0.5);
+    background: rgba(43, 48, 59, 0.5);
+    border: 1px solid rgba(100, 114, 125, 0.5);
 }
+
 tooltip label {
-  color: white;
+    color: white;
 }
 
 #workspaces button {
@@ -40,15 +41,16 @@ tooltip label {
 
 #workspaces button.active {
     background-color: rgba(0, 0, 0, 0.3);
-    color: @mauve;
-    border-top: 2px solid @mauve;
+    color: white;
+    border-top: 2px solid white;
 }
 
 #workspaces button.urgent {
     background-color: #eb4d4b;
 }
 
-#mode, #clock, #battery {
+#mode,
+#clock {
     padding: 0 10px;
 }
 
@@ -57,14 +59,32 @@ tooltip label {
     border-bottom: 3px solid white;
 }
 
+#power-profiles-daemon {
+    padding: 0 20px;
+}
+
 #battery {
-    background-color: #ffffff;
-    color: black;
+    background-color: transparent;
+    color: white;
+    padding: 0 10px;
+}
+
+#battery.plugged {
+    padding: 0;
+}
+
+#battery.full {
+    padding: 0;
+}
+
+#battery.not-charging {
+    padding: 0;
 }
 
 #battery.charging {
     color: white;
     background-color: #26A65B;
+    padding: 0 10px;
 }
 
 @keyframes blink {
