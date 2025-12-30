@@ -1,0 +1,13 @@
+# Laptop only
+profile laptop {
+    output eDP-1 enable mode preferred position 0,0
+    exec ~/.config/kanshi/post-laptop.sh
+}
+
+# Docked / external monitor
+profile docked {
+    output eDP-1 disable
+    output DP-1 enable mode preferred position 0,0
+    exec ~/.config/kanshi/post-docked.sh
+}
+
