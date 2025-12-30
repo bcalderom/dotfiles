@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch lid events
+
+[Path]
+PathChanged=/run/systemd/seats/
+
+[Install]
+WantedBy=default.target
+
