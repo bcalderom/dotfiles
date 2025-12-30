@@ -124,8 +124,8 @@ export PATH
 # Exports
 export VISUAL=nvim
 export EDITOR=nvim
-
-export BROWSER="brave"
+export BROWSER=brave
+export FD_IGNORE_FILE=~/.config/ignore/global.ignore
 
 
 # ~~~~~~~~~~~~~~~ Aliases ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -216,7 +216,8 @@ alias btjd='bluetoothctl disconnect 10:28:74:E6:AC:EC'
 alias btk='bluetoothctl connect 45:28:60:00:01:56'
 
 # Sony WF-1000XM5
-#alias btm='bluetoothctl connect 
+alias btsc='bluetoothctl connect AC:80:0A:4B:A7:CB'
+alias btsd='bluetoothctl disconnect AC:80:0A:4B:A7:CB'
 
 # thefuck alias
 #eval $(thefuck --alias)

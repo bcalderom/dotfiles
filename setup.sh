@@ -32,6 +32,7 @@ PKGS_BASE=(
   fd
   neovim
   less
+  tree
   git
   stow
   zoxide
