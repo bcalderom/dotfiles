@@ -57,8 +57,10 @@ sudo install -m 0755 "${SLEEP_SRC}" "${SLEEP_DST}"
 
 sudo systemctl daemon-reload
 if [[ "${MODE}" == "install" ]]; then
+  echo "Enabling bt-keyboard.service..."
   sudo systemctl enable --now bt-keyboard.service
 else
+  echo "Restarting bt-keyboard.service..."
   sudo systemctl restart bt-keyboard.service
 fi
 
