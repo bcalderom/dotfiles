@@ -1,0 +1,125 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*\$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+go/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.env.local
+.env.*.local
+
+# Other formats
+*.xls
+*.xlsx
+*.csv
+.aws-sam/
+.git/
+deployment_package/
+*.accdb
+*.jpg
+
+# Lambda package
+lambda_package/
+
+# Linux .config
+.config/autostart/
+.config/BraveSoftware/
+.config/go/
+.config/gtk-3.0/
+.config/yay/
+.config/teams/
+.config/Microsof*/
+.config/obsidian/
+.config/Windsurf/
+.config/netbird
+.config/mimeapps.list
+.config/dconf/
+.config/trashrc
+.config/pavucontrol.ini
+.config/pulse/
+.config/session/
+.config/wireplumber/wireplumber.conf.d/50-autoswitch.conf
+.config/kwalletrc
+.config/dolphinrc
+.config/kdeglobals
+.gitignore
+.config/kiorc
+.gitignore
+**/.local/**
+**/go/**
