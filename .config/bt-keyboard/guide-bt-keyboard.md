@@ -1,6 +1,6 @@
 # Auto-connect Bluetooth Keyboard with systemd (Arch Linux)
 
-This guide sets up a systemd service that automatically connects a Bluetooth keyboard at boot, using `bluetoothctl`.
+This guide sets up a systemd service that automatically connects a Bluetooth keyboard at boot (and reconnects it after resume), using `bluetoothctl`.
 
 It includes:
 - a one-time pairing/trusting step
@@ -17,13 +17,16 @@ You will end up with these source files in your home directory:
 ```
 ~/.config/bt-keyboard/
 ├── autoconnect.env
-└── bt-keyboard.service
+├── bt-keyboard.service
+├── bt-keyboard.system-sleep
+└── bt-keyboard-deploy.sh
 ```
 
 And these deployed system files:
 
 - `/etc/bluetooth/autoconnect.env`
 - `/etc/systemd/system/bt-keyboard.service`
+- `/etc/systemd/system-sleep/bt-keyboard`
 
 ---
 
@@ -131,15 +134,8 @@ Type=oneshot
 EnvironmentFile=/etc/bluetooth/autoconnect.env
 
 # Retry loop: handles cases where bluetooth is up but the adapter/device isn't ready yet.
-ExecStart=/usr/bin/bash -c '
-for i in {1..5}; do
-  /usr/bin/bluetoothctl connect "${BT_DEVICE_MAC}" && exit 0
-  sleep 3
-done
-exit 0
-'
-TimeoutStartSec=30s
-RemainAfterExit=yes
+ExecStart=/usr/bin/bash -ceu '/usr/bin/bluetoothctl power on >/dev/null 2>&1 || true; for i in {1..10}; do /usr/bin/bluetoothctl connect "${BT_DEVICE_MAC}" && exit 0; sleep 0.5; done; exit 0'
+TimeoutStartSec=8s
 
 [Install]
 WantedBy=multi-user.target
@@ -152,13 +148,15 @@ WantedBy=multi-user.target
 This section copies:
 - `~/.config/bt-keyboard/autoconnect.env` → `/etc/bluetooth/autoconnect.env`
 - `~/.config/bt-keyboard/bt-keyboard.service` → `/etc/systemd/system/bt-keyboard.service`
+- `~/.config/bt-keyboard/bt-keyboard.system-sleep` → `/etc/systemd/system-sleep/bt-keyboard`
 
 ### Option A: One-liner deploy + enable + start
 
 ```bash
-sudo install -d -m 0755 /etc/bluetooth /etc/systemd/system && \
+sudo install -d -m 0755 /etc/bluetooth /etc/systemd/system /etc/systemd/system-sleep && \
 sudo install -m 0600 ~/.config/bt-keyboard/autoconnect.env /etc/bluetooth/autoconnect.env && \
 sudo install -m 0644 ~/.config/bt-keyboard/bt-keyboard.service /etc/systemd/system/bt-keyboard.service && \
+sudo install -m 0755 ~/.config/bt-keyboard/bt-keyboard.system-sleep /etc/systemd/system-sleep/bt-keyboard && \
 sudo systemctl daemon-reload && \
 sudo systemctl enable --now bt-keyboard.service
 ```
@@ -177,13 +175,39 @@ Paste:
 #!/usr/bin/env bash
 set -euo pipefail
 
+MODE="install"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install)
+      MODE="install"
+      shift
+      ;;
+    --update)
+      MODE="update"
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: $(basename "$0") [--install|--update]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
 SRC_DIR="${HOME}/.config/bt-keyboard"
 ENV_SRC="${SRC_DIR}/autoconnect.env"
 SVC_SRC="${SRC_DIR}/bt-keyboard.service"
+SLEEP_SRC="${SRC_DIR}/bt-keyboard.system-sleep"
 
 ENV_DST_DIR="/etc/bluetooth"
 ENV_DST="${ENV_DST_DIR}/autoconnect.env"
 SVC_DST="/etc/systemd/system/bt-keyboard.service"
+SLEEP_DST_DIR="/etc/systemd/system-sleep"
+SLEEP_DST="${SLEEP_DST_DIR}/bt-keyboard"
 
 if [[ ! -f "${ENV_SRC}" ]]; then
   echo "Missing: ${ENV_SRC}"
@@ -195,16 +219,27 @@ if [[ ! -f "${SVC_SRC}" ]]; then
   exit 1
 fi
 
-sudo install -d -m 0755 "${ENV_DST_DIR}" /etc/systemd/system
+if [[ ! -f "${SLEEP_SRC}" ]]; then
+  echo "Missing: ${SLEEP_SRC}"
+  exit 1
+fi
+
+sudo install -d -m 0755 "${ENV_DST_DIR}" /etc/systemd/system "${SLEEP_DST_DIR}"
 sudo install -m 0600 "${ENV_SRC}" "${ENV_DST}"
 sudo install -m 0644 "${SVC_SRC}" "${SVC_DST}"
+sudo install -m 0755 "${SLEEP_SRC}" "${SLEEP_DST}"
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now bt-keyboard.service
+if [[ "${MODE}" == "install" ]]; then
+  sudo systemctl enable --now bt-keyboard.service
+else
+  sudo systemctl restart bt-keyboard.service
+fi
 
 echo "Deployed:"
 echo "  ${ENV_DST}"
 echo "  ${SVC_DST}"
+echo "  ${SLEEP_DST}"
 echo
 echo "Status:"
 systemctl --no-pager status bt-keyboard.service || true
@@ -214,7 +249,13 @@ Make executable and run:
 
 ```bash
 chmod +x ~/.config/bt-keyboard/bt-keyboard-deploy.sh
-~/.config/bt-keyboard/bt-keyboard-deploy.sh
+~/.config/bt-keyboard/bt-keyboard-deploy.sh --install
+```
+
+To update an existing install after editing `autoconnect.env` or the unit file:
+
+```bash
+~/.config/bt-keyboard/bt-keyboard-deploy.sh --update
 ```
 
 ---
@@ -227,6 +268,8 @@ Check service status:
 systemctl status bt-keyboard.service
 ```
 
+Note: this unit is `Type=oneshot`, so after a successful run it may show as `inactive (dead)`. Use logs to confirm it ran.
+
 Confirm the keyboard is connected:
 
 ```bash
@@ -237,7 +280,7 @@ bluetoothctl info "$(grep -E '^BT_DEVICE_MAC=' /etc/bluetooth/autoconnect.env | 
 
 ## Troubleshooting
 
-### 1) Service is `active (exited)` but keyboard isn’t connected
+### 1) Service ran but keyboard isn’t connected
 - Ensure the keyboard is powered on and in range
 - Ensure it was `trust`ed:
 
@@ -252,8 +295,8 @@ Increase retries and/or sleep:
 
 In `/etc/systemd/system/bt-keyboard.service` change:
 
-- `{1..5}` → `{1..10}`
-- `sleep 3` → `sleep 5`
+- `{1..10}` → `{1..20}`
+- `sleep 0.5` → `sleep 1`
 
 Then:
 
@@ -284,6 +327,7 @@ Remove files:
 
 ```bash
 sudo rm -f /etc/systemd/system/bt-keyboard.service
+sudo rm -f /etc/systemd/system-sleep/bt-keyboard
 sudo rm -f /etc/bluetooth/autoconnect.env
 sudo systemctl daemon-reload
 ```
@@ -304,5 +348,6 @@ Expected:
 ~/.config/bt-keyboard
 ├── autoconnect.env
 ├── bt-keyboard.service
-└── deploy.sh   (optional)
+├── bt-keyboard.system-sleep
+└── bt-keyboard-deploy.sh
 ```

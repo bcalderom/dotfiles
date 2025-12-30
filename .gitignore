@@ -115,3 +115,9 @@ lambda_package/
 .config/session/
 .config/wireplumber/wireplumber.conf.d/50-autoswitch.conf
 .config/kwalletrc
+.config/dolphinrc
+.config/kdeglobals
+.gitignore
+.config/kiorc
+.gitignore
+.config/ktrashrc

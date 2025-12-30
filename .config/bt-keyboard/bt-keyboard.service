@@ -7,9 +7,8 @@ Requires=bluetooth.service
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/bluetooth/autoconnect.env
-ExecStart=/usr/bin/bash -c '/usr/bin/bluetoothctl connect "${BT_DEVICE_MAC}" || true'
-TimeoutStartSec=10s
-RemainAfterExit=yes
+ExecStart=/usr/bin/bash -ceu '/usr/bin/bluetoothctl power on >/dev/null 2>&1 || true; for i in {1..10}; do /usr/bin/bluetoothctl connect "${BT_DEVICE_MAC}" && exit 0; sleep 0.5; done; exit 0'
+TimeoutStartSec=8s
 
 [Install]
 WantedBy=multi-user.target

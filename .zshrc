@@ -60,10 +60,15 @@ typeset -g POWERLEVEL9K_INSTANT_PROMPT=quiet
 
 # Keybindings
 #bindkey -v   # This sets the keymap to Vi mode
+# Ctrl+P: search backward through history for commands starting with the current prompt text
 bindkey '^p' history-search-backward
+# Ctrl+N: search forward through history for commands starting with the current prompt text
 bindkey '^n' history-search-forward
+# Alt+W (Esc-w): kill (cut) the active region/selection
 bindkey '^[w' kill-region
 
+# Alt+. (Esc-.): insert the last word from the previous command
+bindkey '^[.' insert-last-word
 
 # ~~~~~~~~~~~~~~~ History ~~~~~~~~~~~~~~~~~~~~~~~~
 
