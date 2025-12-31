@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VAULT="$HOME/Obsidian/engineer"
+INBOX="$VAULT/0 Inbox"
+TEMPLATE="new-nvim-note"
+
+slugify() {
+  local s="$1"
+  s="$(printf "%s" "$s" | tr '[:upper:]' '[:lower:]')"
+  s="$(printf "%s" "$s" | sed -E 's/[[:space:]]+/-/g')"
+  s="$(printf "%s" "$s" | sed -E 's/[^a-z0-9-]//g')"
+  s="$(printf "%s" "$s" | sed -E 's/-+/-/g; s/^-+//; s/-+$//')"
+  printf "%s" "$s"
+}
+
+prompt_title() {
+  local title="${1:-}"
+  if [[ -n "$title" ]]; then
+    printf "%s" "$title"
+    return 0
+  fi
+  read -r -p "Note title: " title
+  printf "%s" "$title"
+}
+
+TITLE="${*:-}"
+TITLE="$(prompt_title "$TITLE")"
+
+while true; do
+  if [[ -z "${TITLE// /}" ]]; then
+    echo "Título vacío. Abortando."
+    exit 1
+  fi
+
+  SLUG="$(slugify "$TITLE")"
+  if [[ -z "$SLUG" ]]; then
+    echo "El título no produce un nombre de archivo válido. Intenta otro."
+    TITLE="$(prompt_title "")"
+    continue
+  fi
+
+  TARGET="$INBOX/$SLUG.md"
+  if [[ -e "$TARGET" ]]; then
+    echo "Ya existe: $TARGET"
+    TITLE="$(prompt_title "")"
+    continue
+  fi
+  break
+done
+
+# Lua: go below YAML if it exists; otherwise go to top.
+# Then ensure a blank line after YAML and enter insert.
+LUA_CMD='
+local b=0
+local lines=vim.api.nvim_buf_get_lines(b,0,-1,false)
+local function is_sep(s) return s and s:match("^%-%-%-%s*$") end
+local end_sep=nil
+if #lines>=1 and is_sep(lines[1]) then
+  for i=2,#lines do
+    if is_sep(lines[i]) then end_sep=i; break end
+  end
+end
+if end_sep then
+  local after = end_sep + 1
+  -- If there is already a blank line right after YAML, place cursor there.
+  if lines[after] ~= nil and lines[after]:match("^%s*$") then
+    vim.api.nvim_win_set_cursor(0,{after,0})
+    -- mover una línea más abajo y mantener insert
+    vim.cmd("normal! o")
+    vim.cmd("startinsert")
+  else
+    vim.api.nvim_win_set_cursor(0,{end_sep,0})
+    vim.cmd("normal! o")
+    vim.cmd("startinsert")
+  end
+else
+  vim.api.nvim_win_set_cursor(0,{1,0})
+  vim.cmd("startinsert")
+end
+'
+
+nvim \
+  +"cd $VAULT" \
+  +"Obsidian new \"$TITLE\"" \
+  +"Obsidian template $TEMPLATE" \
+  +"checktime" \
+  +"lua $LUA_CMD"
