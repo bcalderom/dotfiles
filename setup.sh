@@ -36,6 +36,7 @@ PKGS_BASE=(
   git
   stow
   zoxide
+  man-db
 )
 
 # Wayland / Hyprland desktop stack
