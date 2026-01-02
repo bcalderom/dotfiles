@@ -1,8 +1,78 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VAULT="$HOME/Obsidian/engineer"
-INBOX="$VAULT/0 Inbox"
+MODE="note"
+OVERRIDE_DIR=""
+OVERRIDE_TEMPLATE=""
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [options] [title]
+
+Options:
+  -n, --note            Create a note (default)
+  -d, --daily           Create/open a daily note (YYYY-MM-DD; defaults to today)
+      --dir PATH        Override target directory
+      --template PATH   Override template file path
+  -h, --help            Show this help
+
+Environment overrides:
+  ONN_VAULT, ONN_NOTE_DIR, ONN_DAILY_DIR, ONN_TEMPLATE_DIR,
+  ONN_NOTE_TEMPLATE, ONN_DAILY_TEMPLATE
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -n|--note)
+      MODE="note"
+      shift
+      ;;
+    -d|--daily)
+      MODE="daily"
+      shift
+      ;;
+    --dir)
+      OVERRIDE_DIR="${2:-}"
+      if [[ -z "${OVERRIDE_DIR}" ]]; then
+        echo "Missing value for --dir" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --template)
+      OVERRIDE_TEMPLATE="${2:-}"
+      if [[ -z "${OVERRIDE_TEMPLATE}" ]]; then
+        echo "Missing value for --template" >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+VAULT="${ONN_VAULT:-$HOME/Obsidian/engineer}"
+NOTE_DIR="${ONN_NOTE_DIR:-$VAULT/0 Inbox}"
+DAILY_DIR="${ONN_DAILY_DIR:-$VAULT/Periodic Notes/Daily}"
+
+TEMPLATE_DIR="${ONN_TEMPLATE_DIR:-$VAULT/3 Resources/templates/}"
+NOTE_TEMPLATE="${ONN_NOTE_TEMPLATE:-$TEMPLATE_DIR/new-nvim-note.md}"
+DAILY_TEMPLATE="${ONN_DAILY_TEMPLATE:-$TEMPLATE_DIR/daily.md}"
 
 slugify() {
   local s="$1"
@@ -11,6 +81,36 @@ slugify() {
   s="$(printf "%s" "$s" | sed -E 's/[^a-z0-9-]//g')"
   s="$(printf "%s" "$s" | sed -E 's/-+/-/g; s/^-+//; s/-+$//')"
   printf "%s" "$s"
+}
+
+escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\\&@]/\\\\&/g'
+}
+
+render_template_inplace() {
+  local file="$1"
+  local date_value="$2"
+  local created_iso="$3"
+  local title_value="$4"
+  local daily_nav_value="${5:-}"
+
+  local date_esc created_esc title_esc slug_esc
+  date_esc="$(escape_sed_replacement "$date_value")"
+  created_esc="$(escape_sed_replacement "$created_iso")"
+  title_esc="$(escape_sed_replacement "$title_value")"
+  slug_esc="$(escape_sed_replacement "$(slugify "$title_value")")"
+  local daily_nav_esc
+  daily_nav_esc="$(escape_sed_replacement "$daily_nav_value")"
+
+  sed -i \
+    -e "s@{{date}}@${date_esc}@g" \
+    -e "s@{{daily_date}}@${date_esc}@g" \
+    -e "s@{{created_iso}}@${created_esc}@g" \
+    -e "s@{{created}}@${created_esc}@g" \
+    -e "s@{{title}}@${title_esc}@g" \
+    -e "s@{{slug}}@${slug_esc}@g" \
+    -e "s@{{daily_nav}}@${daily_nav_esc}@g" \
+    "$file"
 }
 
 prompt_title() {
@@ -23,6 +123,7 @@ prompt_title() {
 # Returns "FINAL_TITLE|TARGET_PATH"
 ensure_unique_target() {
   local title="$1"
+  local target_dir="$2"
 
   while true; do
     if [[ -z "${title// /}" ]]; then
@@ -33,17 +134,17 @@ ensure_unique_target() {
     local slug
     slug="$(slugify "$title")"
     if [[ -z "$slug" ]]; then
-      echo "El título no produce un nombre de archivo válido."
-      title="$(prompt_title "Nuevo título:")"
+      echo "The title does not produce a valid filename." >&2
+      title="$(prompt_title "New title:")"
       continue
     fi
 
-    local target="$INBOX/$slug.md"
+    local target="$target_dir/$slug.md"
     if [[ -e "$target" ]]; then
       # Mostrar ruta con espacios escapados (\ )
       escaped_target="${target// /\\ }"
-      echo "Ya existe: $escaped_target" >&2
-      title="$(prompt_title "Nuevo título:")"
+      echo "Already exists: $escaped_target" >&2
+      title="$(prompt_title "New title:")"
       continue
     fi
 
@@ -52,21 +153,55 @@ ensure_unique_target() {
   done
 }
 
-mkdir -p "$INBOX"
+EDITOR_CMD="${EDITOR:-nvim}"
+CREATED="$(date +'%Y-%m-%dT%H:%M')"
 
-TITLE="${*:-}"
-if [[ -z "${TITLE// /}" ]]; then
-  TITLE="$(prompt_title "Note title:")"
+if [[ "${MODE}" == "daily" ]]; then
+  if [[ $# -gt 1 ]]; then
+    echo "Too many arguments for --daily" >&2
+    exit 2
+  fi
+
+  DAILY_DATE="${1:-$(date +%F)}"
+  if [[ ! "${DAILY_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "Invalid date for daily note (expected YYYY-MM-DD): ${DAILY_DATE}" >&2
+    exit 2
+  fi
+
+  TARGET_DIR="${OVERRIDE_DIR:-$DAILY_DIR}"
+  TEMPLATE_PATH="${OVERRIDE_TEMPLATE:-$DAILY_TEMPLATE}"
+  mkdir -p "$TARGET_DIR"
+
+  TARGET="$TARGET_DIR/$DAILY_DATE.md"
+  if [[ -e "$TARGET" ]]; then
+    "$EDITOR_CMD" "$TARGET"
+    escaped_final="${TARGET// /\\ }"
+    echo "Opened: $escaped_final"
+    exit 0
+  fi
+else
+  TARGET_DIR="${OVERRIDE_DIR:-$NOTE_DIR}"
+  TEMPLATE_PATH="${OVERRIDE_TEMPLATE:-$NOTE_TEMPLATE}"
+  mkdir -p "$TARGET_DIR"
+
+  TITLE="${*:-}"
+  if [[ -z "${TITLE// /}" ]]; then
+    TITLE="$(prompt_title "Note title:")"
+  fi
+
+  PAIR="$(ensure_unique_target "$TITLE" "$TARGET_DIR")"
+  TARGET="${PAIR#*|}"
 fi
 
-PAIR="$(ensure_unique_target "$TITLE")"
-TARGET="${PAIR#*|}"
-
-CREATED="$(date +'%Y-%m-%dT%H:%M')"
 TMP="$(mktemp --suffix=.md)"
 trap 'rm -f "$TMP"' EXIT
 
-cat >"$TMP" <<EOF
+USED_TEMPLATE_FILE=0
+if [[ -f "${TEMPLATE_PATH}" ]]; then
+  cp "${TEMPLATE_PATH}" "$TMP"
+  USED_TEMPLATE_FILE=1
+else
+  cat >"$TMP" <<EOF
 ---
 Created: $CREATED
 tags: []
@@ -74,18 +209,32 @@ tags: []
 
 
 EOF
+fi
+
+if [[ "${MODE}" == "daily" ]]; then
+  YESTERDAY_DATE="$(date -d "${DAILY_DATE} -1 day" +%F)"
+  TOMORROW_DATE="$(date -d "${DAILY_DATE} +1 day" +%F)"
+  DAILY_NAV="<< [[${YESTERDAY_DATE}|Yesterday]] | [[${TOMORROW_DATE}|Tomorrow]] >>"
+  render_template_inplace "$TMP" "${DAILY_DATE}" "${CREATED}" "${DAILY_DATE}" "${DAILY_NAV}"
+else
+  render_template_inplace "$TMP" "$(date +%F)" "${CREATED}" "${TITLE}" ""
+fi
 
 BASE_HASH="$(sha256sum "$TMP" | awk '{print $1}')"
 
-nvim +"call cursor(6,1)" +startinsert "$TMP"
+if [[ "${MODE}" == "note" ]] && [[ "$(basename -- "${EDITOR_CMD}")" =~ ^(nvim|vim)$ ]]; then
+  "$EDITOR_CMD" +"call cursor(6,1)" +startinsert "$TMP"
+else
+  "$EDITOR_CMD" "$TMP"
+fi
 
 NEW_HASH="$(sha256sum "$TMP" | awk '{print $1}')"
 if [[ "$NEW_HASH" == "$BASE_HASH" ]]; then
-  echo "Descartado (sin cambios)."
+  echo "Discarded (no changes)."
   exit 0
 fi
 
-if ! awk '
+if [[ "$USED_TEMPLATE_FILE" -eq 0 ]] && ! awk '
   BEGIN{in_yaml=0; saw_end=0; content=0}
   NR==1 && $0 ~ /^---[[:space:]]*$/ {in_yaml=1; next}
   in_yaml && $0 ~ /^---[[:space:]]*$/ {saw_end=1; in_yaml=0; next}
@@ -94,13 +243,13 @@ if ! awk '
   }
   END{exit content?0:1}
 ' "$TMP"; then
-  echo "Descartado (solo template)."
+  echo "Discarded (template only)."
   exit 0
 fi
 
 mv "$TMP" "$TARGET"
 trap - EXIT
 
-# Mostrar ruta con espacios escapados (\ )
 escaped_final="${TARGET// /\\ }"
-echo "Guardado: $escaped_final"
+echo "Saved: $escaped_final"
+
