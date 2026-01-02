@@ -1,5 +1,5 @@
 if [[ -z $DISPLAY && -z $WAYLAND_DISPLAY && $(tty) == /dev/tty1 ]]; then
-  Hyprland
+  start-hyprland
   echo "Hyprland exited with code $?. Dropping to shell."
 fi
 
