@@ -53,6 +53,8 @@ PKGS_HYPR=(
   slurp
   polkit
   polkit-gnome
+  hypridle
+  hyprlock
 )
 
 # UI / desktop utilities
@@ -102,8 +104,8 @@ PKGS_OPTIONAL=(
 PKGS_INTEL=(
   linux-firmware-intel
   intel-media-driver
-  libva-utils
   intel-ucode
+  # libva-utils
 )
 
 ############################
@@ -128,19 +130,31 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "${1:-}" in
-    --dry-run) DRY_RUN=1; shift ;;
-    --no-update) DO_UPDATE=0; shift ;;
-    --only)
-      [[ $# -lt 2 ]] && { echo "Error: --only requires a value"; exit 2; }
-      IFS=',' read -r -a ONLY_GROUPS <<< "${2}"
-      shift 2
-      ;;
-    -h|--help) usage; exit 0 ;;
-    *)
-      echo "Unknown option: $1"
-      usage
+  --dry-run)
+    DRY_RUN=1
+    shift
+    ;;
+  --no-update)
+    DO_UPDATE=0
+    shift
+    ;;
+  --only)
+    [[ $# -lt 2 ]] && {
+      echo "Error: --only requires a value"
       exit 2
-      ;;
+    }
+    IFS=',' read -r -a ONLY_GROUPS <<<"${2}"
+    shift 2
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Unknown option: $1"
+    usage
+    exit 2
+    ;;
   esac
 done
 
@@ -167,7 +181,8 @@ is_installed() {
 }
 
 print_group() {
-  local name="$1"; shift
+  local name="$1"
+  shift
   local -a pkgs=("$@")
 
   echo
@@ -206,18 +221,18 @@ should_include_group() {
 get_group_pkgs() {
   local g="$1"
   case "$g" in
-    base)      printf '%s\n' "${PKGS_BASE[@]}" ;;
-    hypr)      printf '%s\n' "${PKGS_HYPR[@]}" ;;
-    ui)        printf '%s\n' "${PKGS_UI[@]}" ;;
-    media)     printf '%s\n' "${PKGS_MEDIA[@]}" ;;
-    bluetooth) printf '%s\n' "${PKGS_BLUETOOTH[@]}" ;;
-    fonts)     printf '%s\n' "${PKGS_FONTS[@]}" ;;
-    optional)  printf '%s\n' "${PKGS_OPTIONAL[@]}" ;;
-    intel)     printf '%s\n' "${PKGS_INTEL[@]}" ;;
-    *)
-      echo "Error: unknown group '$g'" >&2
-      exit 2
-      ;;
+  base) printf '%s\n' "${PKGS_BASE[@]}" ;;
+  hypr) printf '%s\n' "${PKGS_HYPR[@]}" ;;
+  ui) printf '%s\n' "${PKGS_UI[@]}" ;;
+  media) printf '%s\n' "${PKGS_MEDIA[@]}" ;;
+  bluetooth) printf '%s\n' "${PKGS_BLUETOOTH[@]}" ;;
+  fonts) printf '%s\n' "${PKGS_FONTS[@]}" ;;
+  optional) printf '%s\n' "${PKGS_OPTIONAL[@]}" ;;
+  intel) printf '%s\n' "${PKGS_INTEL[@]}" ;;
+  *)
+    echo "Error: unknown group '$g'" >&2
+    exit 2
+    ;;
   esac
 }
 
