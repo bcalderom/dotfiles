@@ -3,7 +3,6 @@ set -euo pipefail
 
 VAULT="$HOME/Obsidian/engineer"
 INBOX="$VAULT/0 Inbox"
-TEMPLATE="new-nvim-note"
 
 slugify() {
   local s="$1"
@@ -15,74 +14,93 @@ slugify() {
 }
 
 prompt_title() {
-  local title="${1:-}"
-  if [[ -n "$title" ]]; then
-    printf "%s" "$title"
-    return 0
-  fi
-  read -r -p "Note title: " title
+  local prompt="${1:-Note title:}"
+  local title=""
+  read -r -p "${prompt} " title || true
   printf "%s" "$title"
 }
 
+# Returns "FINAL_TITLE|TARGET_PATH"
+ensure_unique_target() {
+  local title="$1"
+
+  while true; do
+    if [[ -z "${title// /}" ]]; then
+      title="$(prompt_title "Note title:")"
+      continue
+    fi
+
+    local slug
+    slug="$(slugify "$title")"
+    if [[ -z "$slug" ]]; then
+      echo "El título no produce un nombre de archivo válido."
+      title="$(prompt_title "Nuevo título:")"
+      continue
+    fi
+
+    local target="$INBOX/$slug.md"
+    if [[ -e "$target" ]]; then
+      # Mostrar ruta con espacios escapados (\ )
+      escaped_target="${target// /\\ }"
+      echo "Ya existe: $escaped_target" >&2
+      title="$(prompt_title "Nuevo título:")"
+      continue
+    fi
+
+    printf "%s|%s\n" "$title" "$target"
+    return 0
+  done
+}
+
+mkdir -p "$INBOX"
+
 TITLE="${*:-}"
-TITLE="$(prompt_title "$TITLE")"
+if [[ -z "${TITLE// /}" ]]; then
+  TITLE="$(prompt_title "Note title:")"
+fi
 
-while true; do
-  if [[ -z "${TITLE// /}" ]]; then
-    echo "Título vacío. Abortando."
-    exit 1
-  fi
+PAIR="$(ensure_unique_target "$TITLE")"
+TARGET="${PAIR#*|}"
 
-  SLUG="$(slugify "$TITLE")"
-  if [[ -z "$SLUG" ]]; then
-    echo "El título no produce un nombre de archivo válido. Intenta otro."
-    TITLE="$(prompt_title "")"
-    continue
-  fi
+CREATED="$(date +'%Y-%m-%dT%H:%M')"
+TMP="$(mktemp --suffix=.md)"
+trap 'rm -f "$TMP"' EXIT
 
-  TARGET="$INBOX/$SLUG.md"
-  if [[ -e "$TARGET" ]]; then
-    echo "Ya existe: $TARGET"
-    TITLE="$(prompt_title "")"
-    continue
-  fi
-  break
-done
+cat >"$TMP" <<EOF
+---
+Created: $CREATED
+tags: []
+---
 
-# Lua: go below YAML if it exists; otherwise go to top.
-# Then ensure a blank line after YAML and enter insert.
-LUA_CMD='
-local b=0
-local lines=vim.api.nvim_buf_get_lines(b,0,-1,false)
-local function is_sep(s) return s and s:match("^%-%-%-%s*$") end
-local end_sep=nil
-if #lines>=1 and is_sep(lines[1]) then
-  for i=2,#lines do
-    if is_sep(lines[i]) then end_sep=i; break end
-  end
-end
-if end_sep then
-  local after = end_sep + 1
-  -- If there is already a blank line right after YAML, place cursor there.
-  if lines[after] ~= nil and lines[after]:match("^%s*$") then
-    vim.api.nvim_win_set_cursor(0,{after,0})
-    -- mover una línea más abajo y mantener insert
-    vim.cmd("normal! o")
-    vim.cmd("startinsert")
-  else
-    vim.api.nvim_win_set_cursor(0,{end_sep,0})
-    vim.cmd("normal! o")
-    vim.cmd("startinsert")
-  end
-else
-  vim.api.nvim_win_set_cursor(0,{1,0})
-  vim.cmd("startinsert")
-end
-'
 
-nvim \
-  +"cd $VAULT" \
-  +"Obsidian new \"$TITLE\"" \
-  +"Obsidian template $TEMPLATE" \
-  +"checktime" \
-  +"lua $LUA_CMD"
+EOF
+
+BASE_HASH="$(sha256sum "$TMP" | awk '{print $1}')"
+
+nvim +"call cursor(6,1)" +startinsert "$TMP"
+
+NEW_HASH="$(sha256sum "$TMP" | awk '{print $1}')"
+if [[ "$NEW_HASH" == "$BASE_HASH" ]]; then
+  echo "Descartado (sin cambios)."
+  exit 0
+fi
+
+if ! awk '
+  BEGIN{in_yaml=0; saw_end=0; content=0}
+  NR==1 && $0 ~ /^---[[:space:]]*$/ {in_yaml=1; next}
+  in_yaml && $0 ~ /^---[[:space:]]*$/ {saw_end=1; in_yaml=0; next}
+  saw_end {
+    if ($0 !~ /^[[:space:]]*$/) {content=1}
+  }
+  END{exit content?0:1}
+' "$TMP"; then
+  echo "Descartado (solo template)."
+  exit 0
+fi
+
+mv "$TMP" "$TARGET"
+trap - EXIT
+
+# Mostrar ruta con espacios escapados (\ )
+escaped_final="${TARGET// /\\ }"
+echo "Guardado: $escaped_final"
