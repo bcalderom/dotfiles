@@ -122,3 +122,4 @@ lambda_package/
 .gitignore
 .config/ktrashrc
 .config/heidisql/
+.config/spotify/
