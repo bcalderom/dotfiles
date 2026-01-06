@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="note"
 OVERRIDE_DIR=""
-OVERRIDE_TEMPLATE=""
+OVERRIDE_TEMPLATE_SPEC=""
 
 usage() {
   cat <<EOF
@@ -12,6 +12,14 @@ Usage: $(basename "$0") [options] [title]
 Options:
   -n, --note            Create a note (default)
   -d, --daily           Create/open a daily note (YYYY-MM-DD; defaults to today)
+      --meeting         Create a note using meeting.md
+      --person          Create a note using person.md
+      --project         Create a note using _Project.md
+      --incident        Create a note using incident.md
+      --improvement     Create a note using improvement.md
+      --decision        Create a note using decision.md
+      --enablement      Create a note using enablement.md
+      --operational     Create a note using operational.md
       --dir PATH        Override target directory
       --template PATH   Override template file path
   -h, --help            Show this help
@@ -32,6 +40,46 @@ while [[ $# -gt 0 ]]; do
       MODE="daily"
       shift
       ;;
+    --meeting)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:meeting.md"
+      shift
+      ;;
+    --person)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:person.md"
+      shift
+      ;;
+    --project)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:_Project.md"
+      shift
+      ;;
+    --incident)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:incident.md"
+      shift
+      ;;
+    --improvement)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:improvement.md"
+      shift
+      ;;
+    --decision)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:decision.md"
+      shift
+      ;;
+    --enablement)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:enablement.md"
+      shift
+      ;;
+    --operational)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:operational.md"
+      shift
+      ;;
     --dir)
       OVERRIDE_DIR="${2:-}"
       if [[ -z "${OVERRIDE_DIR}" ]]; then
@@ -41,8 +89,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --template)
-      OVERRIDE_TEMPLATE="${2:-}"
-      if [[ -z "${OVERRIDE_TEMPLATE}" ]]; then
+      OVERRIDE_TEMPLATE_SPEC="path:${2:-}"
+      if [[ -z "${OVERRIDE_TEMPLATE_SPEC#path:}" ]]; then
         echo "Missing value for --template" >&2
         exit 2
       fi
@@ -68,11 +116,31 @@ done
 
 VAULT="${ONN_VAULT:-$HOME/Obsidian/engineer}"
 NOTE_DIR="${ONN_NOTE_DIR:-$VAULT/0 Inbox}"
-DAILY_DIR="${ONN_DAILY_DIR:-$VAULT/Periodic Notes/Daily}"
+DAILY_DIR="${ONN_DAILY_DIR:-$VAULT/Daily}"
 
 TEMPLATE_DIR="${ONN_TEMPLATE_DIR:-$VAULT/3 Resources/templates/}"
 NOTE_TEMPLATE="${ONN_NOTE_TEMPLATE:-$TEMPLATE_DIR/new-nvim-note.md}"
 DAILY_TEMPLATE="${ONN_DAILY_TEMPLATE:-$TEMPLATE_DIR/daily.md}"
+
+resolve_template_path() {
+  local default_path="$1"
+  if [[ -z "${OVERRIDE_TEMPLATE_SPEC}" ]]; then
+    printf "%s" "${default_path}"
+    return 0
+  fi
+
+  case "${OVERRIDE_TEMPLATE_SPEC}" in
+    preset:*)
+      printf "%s/%s" "${TEMPLATE_DIR%/}" "${OVERRIDE_TEMPLATE_SPEC#preset:}"
+      ;;
+    path:*)
+      printf "%s" "${OVERRIDE_TEMPLATE_SPEC#path:}"
+      ;;
+    *)
+      printf "%s" "${default_path}"
+      ;;
+  esac
+}
 
 slugify() {
   local s="$1"
@@ -169,7 +237,7 @@ if [[ "${MODE}" == "daily" ]]; then
   fi
 
   TARGET_DIR="${OVERRIDE_DIR:-$DAILY_DIR}"
-  TEMPLATE_PATH="${OVERRIDE_TEMPLATE:-$DAILY_TEMPLATE}"
+  TEMPLATE_PATH="$(resolve_template_path "$DAILY_TEMPLATE")"
   mkdir -p "$TARGET_DIR"
 
   TARGET="$TARGET_DIR/$DAILY_DATE.md"
@@ -181,7 +249,7 @@ if [[ "${MODE}" == "daily" ]]; then
   fi
 else
   TARGET_DIR="${OVERRIDE_DIR:-$NOTE_DIR}"
-  TEMPLATE_PATH="${OVERRIDE_TEMPLATE:-$NOTE_TEMPLATE}"
+  TEMPLATE_PATH="$(resolve_template_path "$NOTE_TEMPLATE")"
   mkdir -p "$TARGET_DIR"
 
   TITLE="${*:-}"
