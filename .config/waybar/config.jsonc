@@ -1,18 +1,29 @@
 {
   "position": "top",
-  "modules-left": ["hyprland/workspaces"],
-  "modules-center": ["hyprland/window"],
-  "modules-right": ["pulseaudio", "clock"],
+  "modules-left": [
+    "hyprland/workspaces"
+  ],
+  "modules-center": [
+    "clock"
+  ],
+  "modules-right": [
+    "power-profiles-daemon",
+    "pulseaudio"
+  ],
   "pulseaudio": {
-      "format": "{icon}  {volume}%",
-      "format-muted": "",
-      "format-icons": {
-          "default": ["", "", " "]
-      },
-      "on-click": "pavucontrol"
+    "format": "{icon}  {volume}%",
+    "format-muted": "",
+    "format-icons": {
+      "default": [
+        "",
+        "",
+        " "
+      ]
+    },
+    "on-click": "pavucontrol"
   },
   "clock": {
-    "format": "<span>   </span>{:%A, %b %d  %H:%M}",
-    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><large>{calendar}</large></tt>"
+    "format": "{:%A, %b %d - %H:%M}",
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><span size=\"large\">{calendar}</span></tt>"
   }
 }
