@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ssh-fzf: user-friendly SSH launcher for ~/.ssh/config using fzf
+# ssf: user-friendly SSH launcher for ~/.ssh/config using fzf
 #
 # Features:
 # - Parses Host / HostName / User stanzas
@@ -30,7 +30,7 @@ SELF_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${
 
 usage() {
   cat <<'EOF'
-Usage: ssh-fzf [options] [alias]
+Usage: ssf [options] [alias]
 
 Options:
   -c, --config PATH     SSH config file (default: ~/.ssh/config)
@@ -58,7 +58,7 @@ die() { echo "Error: $*" >&2; exit 1; }
 
 editor() { echo "${EDITOR:-vi}"; }
 
-hist_file() { echo "${XDG_CACHE_HOME:-$HOME/.cache}/ssh-fzf-history"; }
+hist_file() { echo "${XDG_CACHE_HOME:-$HOME/.cache}/ssf-history"; }
 
 ensure_deps() {
   need_cmd fzf || die "fzf not found. Install fzf first."
