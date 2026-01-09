@@ -7,8 +7,13 @@
     "clock"
   ],
   "modules-right": [
+    "battery",
     "power-profiles-daemon",
-    "pulseaudio"
+    "pulseaudio",
+    "disk",
+    "temperature",
+    "cpu",
+    "memory"
   ],
   "pulseaudio": {
     "format": "{icon}  {volume}%",
@@ -22,8 +27,60 @@
     },
     "on-click": "pavucontrol"
   },
+  "battery": {
+    "states": {
+      "warning": 30,
+      "critical": 15
+    },
+    // "format": "",
+    "format": "{capacity}% {icon}",
+    "format-charging": " {capacity}%",
+    "format-discharging": "{capacity}% {icon}",
+    // "format-plugged": "",
+    "format-plugged": " {capacity}%",
+    // "format-full": "",
+    "format-full": " {capacity}%",
+    // "format-not-charging": "",
+    "format-not-charging": "{capacity}% {icon}",
+    "format-icons": [
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "tooltip": true
+  },
+  "power-profiles-daemon": {
+    "format": "{icon}",
+    "tooltip": true,
+    "format-icons": {
+      "default": "",
+      "performance": "",
+      "balanced": "",
+      "power-saver": ""
+    }
+  },
   "clock": {
     "format": "{:%A, %b %d - %H:%M}",
     "tooltip-format": "<big>{:%Y %B}</big>\n<tt><span size=\"large\">{calendar}</span></tt>"
+  },
+  "disk": {
+    "interval": 30,
+    "path": "/",
+    "format": "  {percentage_used}%",
+    "tooltip-format": "{used} / {total}"
+  },
+  "temperature": {
+    "critical-threshold": 85,
+    "format": " {temperatureC}°C"
+  },
+  "cpu": {
+    "format": "  {usage}%",
+    "interval": 2
+  },
+  "memory": {
+    "interval": 5,
+    "format": " {used:0.1f}G / {total:0.1f}G"
   }
 }
