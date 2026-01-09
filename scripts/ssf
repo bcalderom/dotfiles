@@ -83,9 +83,14 @@ parse_config() {
       for (i=1; i<=n; i++) {
         a = parts[i]
         if (a=="" || a=="*") continue
-        split(a, parts2, "_")
-        grp = (length(parts2[1]) ? parts2[1] : "")
-        role = (length(parts2[2]) ? parts2[2] : "")
+        n2 = split(a, parts2, "_")
+        if (n2 == 1) {
+          grp = ""
+          role = (length(parts2[1]) ? parts2[1] : "")
+        } else {
+          grp = (length(parts2[1]) ? parts2[1] : "")
+          role = (length(parts2[2]) ? parts2[2] : "")
+        }
         variant=""
         if (length(parts2[3])) {
           variant=parts2[3]
@@ -202,15 +207,39 @@ dump_mode() {
 # display \t alias \t hostname \t user \t group \t role \t variant
 build_display_rows() {
   awk -F$'\t' '
+    function resolve_ip(host,   cmd, line, parts, ip) {
+      if (host in ip_cache) return ip_cache[host]
+      ip="-"
+      cmd = "getent ahosts \"" host "\" 2>/dev/null"
+      if ((cmd | getline line) > 0) {
+        split(line, parts, /[ \t]+/)
+        if (parts[1] != "") ip = parts[1]
+      }
+      close(cmd)
+      ip_cache[host]=ip
+      return ip
+    }
     BEGIN {
-      client_w=12; server_w=14; var_w=12;
+      client_w=12; server_w=14; ip_w=16; var_w=12;
+
+      header = sprintf("%-*s  %-*s  %-*s  %-*s",
+                       client_w, "Client",
+                       server_w, "Server",
+                       ip_w, "IP Address",
+                       var_w, "User")
+      print header
     }
     {
       alias=$1; host=$2; user=$3; client=$4; server=$5; variant=$6;
       if (variant=="") variant="-";
 
-      display = sprintf("%-*s  %-*s  %-*s",
-                        client_w, client, server_w, server, var_w, variant)
+      ip = resolve_ip(host)
+
+      display = sprintf("%-*s  %-*s  %-*s  %-*s",
+                        client_w, client,
+                        server_w, server,
+                        ip_w, ip,
+                        var_w, user)
 
       # Keep raw fields for actions/preview
       print display "\t" alias "\t" host "\t" user "\t" client "\t" server "\t" variant
@@ -227,9 +256,15 @@ preview_cmd() {
 bash -c '
   IFS=\$'\''\t'\'' read -r display alias host user client server variant <<< "\$1"
 
+  ip="-"
+  if ip_line="\$(getent ahosts "\$host" 2>/dev/null | head -n1)" && [[ -n "\$ip_line" ]]; then
+    ip="\${ip_line%%[[:space:]]*}"
+  fi
+
   echo "Client:     \$client"
   echo "Server:     \$server"
-  echo "Variant:    \${variant:-"-"}"
+  echo "IP Address: \$ip"
+  echo "User:       \$user"
   echo
   echo "SSH alias:"
   echo "  \$alias"
@@ -287,6 +322,7 @@ pick_alias_for_host() {
     --prompt="Alias for ${host}> " \
     --delimiter=$'\t' \
     --with-nth=1 \
+    --header-lines=1 \
     --preview="$(preview_cmd "$cfg")" \
     --preview-window=right:60%:wrap \
   )" || return 1
@@ -369,14 +405,21 @@ run_action() {
 }
 
 main() {
-  ensure_deps
-
   # Hidden/internal option for preview helper
   if [[ "${1:-}" == "--_dump" ]]; then
     shift
     dump_mode "${1:-$CONFIG}"
     exit 0
   fi
+
+  # Hidden/internal option for testing: emit rows as shown in fzf
+  if [[ "${1:-}" == "--_rows" ]]; then
+    shift
+    dump_mode "${1:-$CONFIG}" | build_display_rows
+    exit 0
+  fi
+
+  ensure_deps
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -432,16 +475,20 @@ main() {
     data="$(printf "%s\n" "$base" | build_display_rows)"
   fi
 
-  local selection keys line action display alias host user grp role variant
+  local selection keys line action display alias host user grp role variant sep fzf_header
+
+  sep="$(printf '%*s' "${COLUMNS:-80}" '' | tr ' ' '-')"
+  fzf_header="${sep}"$'\n'"Enter: ssh | Ctrl-S: scp | Ctrl-R: rsync | Ctrl-T: tmux"$'\n'"Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host"$'\n'"Ctrl-I: copy host | Ctrl-E: edit"
   selection="$(printf "%s\n" "$data" | fzf \
     --prompt="SSH> " \
     --query="$INITIAL_QUERY" \
     --delimiter=$'\t' \
     --with-nth=1 \
+    --header-lines=1 \
     --expect=enter,ctrl-s,ctrl-r,ctrl-t,ctrl-p,ctrl-k,ctrl-u,ctrl-i,ctrl-e \
     --preview="$(preview_cmd "$CONFIG")" \
     --preview-window=right:60%:wrap \
-    --header=$'Enter: ssh | Ctrl-S: scp | Ctrl-R: rsync | Ctrl-T: tmux | Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host | Ctrl-I: copy host | Ctrl-E: edit' \
+    --header="$fzf_header" \
   )" || exit 0
 
   keys="$(printf "%s\n" "$selection" | sed -n '1p')"
