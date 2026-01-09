@@ -128,8 +128,13 @@ mkdir -p "${MOCK_BIN}"
 cat > "${MOCK_BIN}/mockeditor" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-f="${1:-}"
-if [[ -n "${f}" ]] && [[ -f "${f}" ]]; then
+f=""
+for arg in "$@"; do
+  if [[ -f "${arg}" ]]; then
+    f="${arg}"
+  fi
+done
+if [[ -n "${f}" ]]; then
   printf "\nedited\n" >> "${f}"
 fi
 exit 0

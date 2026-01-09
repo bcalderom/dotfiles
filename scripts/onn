@@ -267,15 +267,15 @@ else
   TARGET="${PAIR#*|}"
 fi
 
-TMP="$(mktemp --suffix=.md)"
-trap 'rm -f "$TMP"' EXIT
+CLEANUP_TARGET=1
+trap 'if [[ "${CLEANUP_TARGET}" -eq 1 ]]; then rm -f -- "${TARGET}"; fi' EXIT
 
 USED_TEMPLATE_FILE=0
 if [[ -f "${TEMPLATE_PATH}" ]]; then
-  cp "${TEMPLATE_PATH}" "$TMP"
+  cp "${TEMPLATE_PATH}" "${TARGET}"
   USED_TEMPLATE_FILE=1
 else
-  cat >"$TMP" <<EOF
+  cat >"${TARGET}" <<EOF
 ---
 Created: $CREATED
 tags: []
@@ -289,20 +289,20 @@ if [[ "${MODE}" == "daily" ]]; then
   YESTERDAY_DATE="$(date -d "${DAILY_DATE} -1 day" +%F)"
   TOMORROW_DATE="$(date -d "${DAILY_DATE} +1 day" +%F)"
   DAILY_NAV="<< [[${YESTERDAY_DATE}|Yesterday]] | [[${TOMORROW_DATE}|Tomorrow]] >>"
-  render_template_inplace "$TMP" "${DAILY_DATE}" "${CREATED}" "${DAILY_DATE}" "${DAILY_NAV}"
+  render_template_inplace "${TARGET}" "${DAILY_DATE}" "${CREATED}" "${DAILY_DATE}" "${DAILY_NAV}"
 else
-  render_template_inplace "$TMP" "$(date +%F)" "${CREATED}" "${TITLE}" ""
+  render_template_inplace "${TARGET}" "$(date +%F)" "${CREATED}" "${TITLE}" ""
 fi
 
-BASE_HASH="$(sha256sum "$TMP" | awk '{print $1}')"
+BASE_HASH="$(sha256sum "${TARGET}" | awk '{print $1}')"
 
 if [[ "${MODE}" == "note" ]] && [[ "$(basename -- "${EDITOR_CMD}")" =~ ^(nvim|vim)$ ]]; then
-  "$EDITOR_CMD" +"call cursor(6,1)" +startinsert "$TMP"
+  "$EDITOR_CMD" +"call cursor(6,1)" +startinsert "${TARGET}"
 else
-  "$EDITOR_CMD" "$TMP"
+  "$EDITOR_CMD" "${TARGET}"
 fi
 
-NEW_HASH="$(sha256sum "$TMP" | awk '{print $1}')"
+NEW_HASH="$(sha256sum "${TARGET}" | awk '{print $1}')"
 if [[ "$NEW_HASH" == "$BASE_HASH" ]]; then
   echo "Discarded (no changes)."
   exit 0
@@ -316,12 +316,12 @@ if [[ "$USED_TEMPLATE_FILE" -eq 0 ]] && ! awk '
     if ($0 !~ /^[[:space:]]*$/) {content=1}
   }
   END{exit content?0:1}
-' "$TMP"; then
+' "${TARGET}"; then
   echo "Discarded (template only)."
   exit 0
 fi
 
-mv "$TMP" "$TARGET"
+CLEANUP_TARGET=0
 trap - EXIT
 
 escaped_final="${TARGET// /\\ }"
