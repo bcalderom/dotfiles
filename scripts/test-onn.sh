@@ -23,6 +23,9 @@ export ONN_TEMPLATE_DIR="${VAULT}/3 Resources/templates"
 
 mkdir -p "${ONN_NOTE_DIR}" "${ONN_DAILY_DIR}" "${ONN_TEMPLATE_DIR}"
 
+export ONN_MEETING_DIR="${VAULT}/Meetings"
+mkdir -p "${ONN_MEETING_DIR}"
+
 cat > "${ONN_TEMPLATE_DIR}/meeting.md" <<EOF
 ---
 template: meeting
@@ -167,16 +170,17 @@ run_and_check() {
   local title="$2"
   local expected_marker="$3"
   local expected_slug="$4"
+  local expected_dir="${5:-$ONN_NOTE_DIR}"
 
   bash "${ONN_SCRIPT}" "${flag}" "${title}" >/dev/null
 
-  local out_file="${ONN_NOTE_DIR}/${expected_slug}.md"
+  local out_file="${expected_dir}/${expected_slug}.md"
   assert_file_exists "${out_file}"
   assert_file_contains "${out_file}" "${expected_marker}"
   assert_file_contains "${out_file}" "title: ${title}"
 }
 
-run_and_check "--meeting" "Weekly Sync" "TEMPLATE:meeting" "weekly-sync"
+run_and_check "--meeting" "Weekly Sync" "TEMPLATE:meeting" "weekly-sync" "${ONN_MEETING_DIR}"
 run_and_check "--person" "Ada Lovelace" "TEMPLATE:person" "ada-lovelace"
 run_and_check "--project" "My Project" "TEMPLATE:project" "my-project"
 run_and_check "--incident" "DB Outage" "TEMPLATE:incident" "db-outage"

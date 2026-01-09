@@ -28,6 +28,9 @@ Options:
 Environment overrides:
   ONN_VAULT, ONN_NOTE_DIR, ONN_DAILY_DIR, ONN_TEMPLATE_DIR,
   ONN_NOTE_TEMPLATE, ONN_DAILY_TEMPLATE
+  ONN_MEETING_DIR, ONN_PERSON_DIR, ONN_PROJECT_DIR, ONN_INCIDENT_DIR,
+  ONN_IMPROVEMENT_DIR, ONN_DECISION_DIR, ONN_ENABLEMENT_DIR,
+  ONN_OPERATIONAL_DIR, ONN_COMMITMENT_DIR
 EOF
 }
 
@@ -128,6 +131,16 @@ TEMPLATE_DIR="${ONN_TEMPLATE_DIR:-$VAULT/3 Resources/templates/}"
 NOTE_TEMPLATE="${ONN_NOTE_TEMPLATE:-$TEMPLATE_DIR/new-nvim-note.md}"
 DAILY_TEMPLATE="${ONN_DAILY_TEMPLATE:-$TEMPLATE_DIR/daily.md}"
 
+MEETING_DIR="${ONN_MEETING_DIR:-$VAULT/4 Companies/Invexsa/Meetings}"
+PERSON_DIR="${ONN_PERSON_DIR:-$VAULT/3 Resources/people}"
+PROJECT_DIR="${ONN_PROJECT_DIR:-$VAULT/4 Companies/Invexsa/Projects}"
+INCIDENT_DIR="${ONN_INCIDENT_DIR:-$VAULT/4 Companies/Invexsa/Incidents}"
+IMPROVEMENT_DIR="${ONN_IMPROVEMENT_DIR:-$VAULT/4 Companies/Invexsa/Improvements}"
+DECISION_DIR="${ONN_DECISION_DIR:-$VAULT/4 Companies/Invexsa/Decisions}"
+ENABLEMENT_DIR="${ONN_ENABLEMENT_DIR:-$VAULT/4 Companies/Invexsa/Enablement}"
+OPERATIONAL_DIR="${ONN_OPERATIONAL_DIR:-$VAULT/4 Companies/Invexsa/Operations}"
+COMMITMENT_DIR="${ONN_COMMITMENT_DIR:-$VAULT/4 Companies/Invexsa/Commitments}"
+
 resolve_template_path() {
   local default_path="$1"
   if [[ -z "${OVERRIDE_TEMPLATE_SPEC}" ]]; then
@@ -146,6 +159,48 @@ resolve_template_path() {
       printf "%s" "${default_path}"
       ;;
   esac
+}
+
+resolve_target_dir() {
+  local default_dir="$1"
+  if [[ -n "${OVERRIDE_DIR}" ]]; then
+    printf "%s" "${OVERRIDE_DIR}"
+    return 0
+  fi
+
+  if [[ "${OVERRIDE_TEMPLATE_SPEC}" == preset:* ]]; then
+    case "${OVERRIDE_TEMPLATE_SPEC#preset:}" in
+      meeting.md)
+        if [[ -n "${MEETING_DIR}" ]]; then printf "%s" "${MEETING_DIR}"; return 0; fi
+        ;;
+      person.md)
+        if [[ -n "${PERSON_DIR}" ]]; then printf "%s" "${PERSON_DIR}"; return 0; fi
+        ;;
+      _Project.md)
+        if [[ -n "${PROJECT_DIR}" ]]; then printf "%s" "${PROJECT_DIR}"; return 0; fi
+        ;;
+      incident.md)
+        if [[ -n "${INCIDENT_DIR}" ]]; then printf "%s" "${INCIDENT_DIR}"; return 0; fi
+        ;;
+      improvement.md)
+        if [[ -n "${IMPROVEMENT_DIR}" ]]; then printf "%s" "${IMPROVEMENT_DIR}"; return 0; fi
+        ;;
+      decision.md)
+        if [[ -n "${DECISION_DIR}" ]]; then printf "%s" "${DECISION_DIR}"; return 0; fi
+        ;;
+      enablement.md)
+        if [[ -n "${ENABLEMENT_DIR}" ]]; then printf "%s" "${ENABLEMENT_DIR}"; return 0; fi
+        ;;
+      operational.md)
+        if [[ -n "${OPERATIONAL_DIR}" ]]; then printf "%s" "${OPERATIONAL_DIR}"; return 0; fi
+        ;;
+      commitment.md)
+        if [[ -n "${COMMITMENT_DIR}" ]]; then printf "%s" "${COMMITMENT_DIR}"; return 0; fi
+        ;;
+    esac
+  fi
+
+  printf "%s" "${default_dir}"
 }
 
 slugify() {
@@ -254,7 +309,7 @@ if [[ "${MODE}" == "daily" ]]; then
     exit 0
   fi
 else
-  TARGET_DIR="${OVERRIDE_DIR:-$NOTE_DIR}"
+  TARGET_DIR="$(resolve_target_dir "$NOTE_DIR")"
   TEMPLATE_PATH="$(resolve_template_path "$NOTE_TEMPLATE")"
   mkdir -p "$TARGET_DIR"
 
