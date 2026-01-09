@@ -1,105 +1,206 @@
+/* =========================
+   Waybar CSS – full file
+   Pill-style modules + hover
+   Date & Battery aligned with right-side applets
+   ========================= */
+
 * {
-    border: none;
-    border-radius: 0;
-    font-family: "MesloLGS Nerd Font Mono Bold";
-    font-size: 16px;
-    min-height: 0;
+  border: none;
+  border-radius: 0;
+  font-family: "MesloLGS Nerd Font Mono Bold";
+  font-size: 16px;
+  min-height: 0;
 }
+
+/* =========================
+   Bar container
+   ========================= */
 
 window#waybar {
-    background: rgba(43, 48, 59, 0.5);
-    /* border-bottom: 3px solid rgba(100, 114, 125, 0.5); */
-    color: white;
+  background: rgba(43, 48, 59, 0.5);
+  color: white;
 }
+
+/* =========================
+   Shared module baseline
+   ========================= */
+
+#window,
+#mode,
+#clock,
+#workspaces,
+#tray,
+#battery,
+#power-profiles-daemon,
+#pulseaudio,
+#disk,
+#temperature,
+#cpu,
+#memory {
+  margin: 5px 4px;
+  padding: 0 10px;
+}
+
+/* =========================
+   Window title
+   ========================= */
 
 #window {
-    margin: 5px;
-    padding-left: 9;
-    padding-right: 9;
+  padding-left: 9px;
+  padding-right: 9px;
 }
 
+/* =========================
+   Tooltip
+   ========================= */
+
 tooltip {
-    background: rgba(43, 48, 59, 0.5);
-    border: 1px solid rgba(100, 114, 125, 0.5);
+  background: rgba(43, 48, 59, 0.85);
+  border: 1px solid rgba(100, 114, 125, 0.65);
+  border-radius: 10px;
 }
 
 tooltip label {
-    color: white;
+  color: white;
 }
 
+/* =========================
+   Workspaces
+   ========================= */
+
 #workspaces button {
-    padding: 0 4px;
-    /* background: transparent; */
-    /* color: white; */
-    /* border-bottom: 3px solid transparent; */
+  padding: 0 6px;
+  margin: 0 2px;
+  background: transparent;
+  color: white;
+  border-top: 2px solid transparent;
+  border-radius: 10px;
+}
+
+#workspaces button:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 #workspaces button.focused {
-    background: #64727D;
-    border-top: 2px solid white;
+  background: #64727D;
+  border-top: 2px solid white;
 }
 
 #workspaces button.active {
-    background-color: rgba(0, 0, 0, 0.3);
-    color: white;
-    border-top: 2px solid white;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-top: 2px solid white;
 }
 
 #workspaces button.urgent {
-    background-color: #eb4d4b;
+  background-color: #eb4d4b;
+  border-top: 2px solid #ffffff;
 }
 
-#mode,
-#clock {
-    padding: 0 10px;
-}
+/* =========================
+   Mode
+   ========================= */
 
 #mode {
-    background: #64727D;
-    border-bottom: 3px solid white;
+  background: #64727D;
+  border-bottom: 3px solid white;
 }
 
-#power-profiles-daemon {
-    padding: 0 20px;
+/* =========================
+   Clock / Date (pill-style)
+   ========================= */
+
+#clock {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  padding: 0 12px;
 }
+
+#clock:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+/* =========================
+   Right-side applets (pills)
+   ========================= */
+
+#power-profiles-daemon,
+#pulseaudio,
+#disk,
+#temperature,
+#cpu,
+#memory {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  padding: 0 12px;
+}
+
+/* Slight emphasis for first applet */
+#power-profiles-daemon {
+  padding: 0 14px;
+}
+
+/* Hover feedback */
+#power-profiles-daemon:hover,
+#pulseaudio:hover,
+#disk:hover,
+#temperature:hover,
+#cpu:hover,
+#memory:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+/* Temperature critical state */
+#temperature.critical {
+  background: rgba(245, 60, 60, 0.65);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* =========================
+   Battery (pill + states)
+   ========================= */
 
 #battery {
-    background-color: transparent;
-    color: white;
-    padding: 0 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  color: white;
+  padding: 0 12px;
 }
 
-#battery.plugged {
-    padding: 0;
+#battery:hover {
+  background: rgba(255, 255, 255, 0.10);
 }
 
-#battery.full {
-    padding: 0;
+/* Keep size consistent in all states */
+#battery.plugged,
+#battery.full,
+#battery.not-charging,
+#battery.charging,
+#battery.warning,
+#battery.critical {
+  padding: 0 12px;
+  border-radius: 12px;
 }
 
-#battery.not-charging {
-    padding: 0;
-}
-
+/* Charging */
 #battery.charging {
-    color: white;
-    background-color: #26A65B;
-    padding: 0 10px;
+  background: rgba(38, 166, 91, 0.80);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
+/* Low battery animation */
 @keyframes blink {
-    to {
-        background-color: #ffffff;
-        color: black;
-    }
+  to {
+    background-color: #ffffff;
+    color: black;
+  }
 }
 
 #battery.warning:not(.charging) {
-    background: #f53c3c;
-    color: white;
-    animation-name: blink;
-    animation-duration: 0.5s;
-    animation-timing-function: steps(12);
-    animation-iteration-count: infinite;
-    animation-direction: alternate;
+  background: rgba(245, 60, 60, 0.80);
+  border-color: rgba(255, 255, 255, 0.15);
+  animation: blink 0.5s steps(12) infinite alternate;
 }
+
