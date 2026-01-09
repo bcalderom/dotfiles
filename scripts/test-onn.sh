@@ -111,6 +111,17 @@ created: {{created}}
 TEMPLATE:operational
 EOF
 
+cat > "${ONN_TEMPLATE_DIR}/commitment.md" <<EOF
+---
+template: commitment
+title: {{title}}
+date: {{date}}
+created: {{created}}
+---
+
+TEMPLATE:commitment
+EOF
+
 MOCK_BIN="${TMPDIR}/bin"
 mkdir -p "${MOCK_BIN}"
 
@@ -168,6 +179,7 @@ run_and_check "--improvement" "Make Deploy Safer" "TEMPLATE:improvement" "make-d
 run_and_check "--decision" "Use Postgres" "TEMPLATE:decision" "use-postgres"
 run_and_check "--enablement" "Improve Onboarding" "TEMPLATE:enablement" "improve-onboarding"
 run_and_check "--operational" "Rotate Secrets" "TEMPLATE:operational" "rotate-secrets"
+run_and_check "--commitment" "Write Weekly Update" "TEMPLATE:commitment" "write-weekly-update"
 
 CUSTOM_TEMPLATE="${TMPDIR}/custom.md"
 cat > "${CUSTOM_TEMPLATE}" <<EOF
