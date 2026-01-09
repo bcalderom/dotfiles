@@ -4,13 +4,14 @@
     "hyprland/workspaces"
   ],
   "modules-center": [
-    "hyprland/window"
+    // "hyprland/window"
+    "clock"
   ],
   "modules-right": [
     "power-profiles-daemon",
     "pulseaudio",
-    "battery",
-    "clock"
+    "battery"
+    // "clock"
   ],
   "pulseaudio": {
     "format": "{icon}  {volume}%",
@@ -55,7 +56,8 @@
     }
   },
   "clock": {
-    "format": "<span>   </span>{:%A, %b %d  %H:%M}",
+    // "format": "<span>   </span>{:%A, %b %d  %H:%M}",
+    "format": "{:%A, %b %d - %H:%M}",
     "tooltip-format": "<big>{:%Y %B}</big>\n<tt><span size=\"large\">{calendar}</span></tt>"
   }
 }
