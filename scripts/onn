@@ -20,6 +20,7 @@ Options:
       --decision        Create a note using decision.md
       --enablement      Create a note using enablement.md
       --operational     Create a note using operational.md
+      --commitment      Create a note using commitment.md
       --dir PATH        Override target directory
       --template PATH   Override template file path
   -h, --help            Show this help
@@ -78,6 +79,11 @@ while [[ $# -gt 0 ]]; do
     --operational)
       MODE="note"
       OVERRIDE_TEMPLATE_SPEC="preset:operational.md"
+      shift
+      ;;
+    --commitment)
+      MODE="note"
+      OVERRIDE_TEMPLATE_SPEC="preset:commitment.md"
       shift
       ;;
     --dir)
