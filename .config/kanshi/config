@@ -1,3 +1,7 @@
+profile mirror {
+     output HDMI-A-1 enable mode preferred
+ }
+
 # Laptop only
 profile laptop {
     output eDP-1 enable mode preferred position 0,0
@@ -10,4 +14,3 @@ profile docked {
     output DP-1 enable mode preferred position 0,0
     exec ~/.config/kanshi/post-docked.sh
 }
-
