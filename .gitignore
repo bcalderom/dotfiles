@@ -121,3 +121,4 @@ lambda_package/
 .config/kiorc
 .gitignore
 .config/ktrashrc
+.config/nvim/lazy-lock.json
