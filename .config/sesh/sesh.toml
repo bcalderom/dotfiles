@@ -12,12 +12,17 @@ startup_command = "onn"
 [[session]]
 name = "Downloads 📥"
 path = "~/Downloads"
-startup_command = "nvim +'autocmd VimEnter * ++once lua vim.schedule(function() local telescope = require(\"telescope\") pcall(telescope.load_extension, \"file_browser\") telescope.extensions.file_browser.file_browser({ path = vim.loop.cwd(), cwd = vim.loop.cwd(), hidden = true, respect_gitignore = false, grouped = true, initial_mode = \"insert\" }) end)'"
+startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() local telescope = require(\"telescope\") pcall(telescope.load_extension, \"file_browser\") telescope.extensions.file_browser.file_browser({ path = vim.loop.cwd(), cwd = vim.loop.cwd(), hidden = true, respect_gitignore = false, grouped = true, initial_mode = \"insert\" }) end)'; clear"
+
+[[session]]
+name = "zshrc config"
+path = "~/.zshrc"
+startup_command = "nvim ~/.zshrc"
 
 [[session]]
 name = "neovim config"
 path = "~/.config/nvim/lua/"
-startup_command = "nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'"
+startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'; clear"
 
 [[session]]
 name = "tmux config"
