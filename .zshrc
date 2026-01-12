@@ -184,7 +184,6 @@ alias ef='nvim $(fzf --height 40% )'
 
 # editors
 alias v='nvim'
-alias vic="vim ~/.vimrc"
 alias zrc="nvim ~/.zshrc"
 
 # ls
@@ -193,14 +192,14 @@ alias la='ls -lahtr'
 # cd directories
 alias dot='cd ~/dotfiles'
 alias scripts='cd ~/dotfiles/scripts/'
-alias hypr='v ~/dotfiles/.config/hypr/hyprland.conf' 
+alias hypr='nvim ~/dotfiles/.config/hypr/hyprland.conf' 
 
 # Changing "ls" to "eza"
-# alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
-# alias la='eza -ag --color=always --group-directories-first' # all files and dirs
-# alias ll='eza -lg --color=always --group-directories-first' # long format
-# alias lt='eza -agT --color=always --group-directories-first' # tree listing
-# alias l.='eza -ag | egrep "^\."'
+alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
+alias la='eza -ag --color=always --group-directories-first' # all files and dirs
+alias ll='eza -lg --color=always --group-directories-first' # long format
+alias lt='eza -agT --color=always --group-directories-first' # tree listing
+alias l.='eza -ag | egrep "^\."'
 
 # Bluetooth
 
