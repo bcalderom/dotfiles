@@ -18,7 +18,12 @@ startup_command = "nvim hyprland.conf"
 [[session]]
 name = "neovim config"
 path = "~/.config/nvim/lua/"
-startup_command = "nvim"
+startup_command = "nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'"
+
+[[session]]
+name = "New Obsidian Note"
+path = "~/Obsidian/engineer/0 Inbox/"
+startup_command = "onn"
 
 # run a script to startup a node project
 # [[session]]
