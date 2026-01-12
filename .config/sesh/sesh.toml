@@ -1,0 +1,26 @@
+# open the file manager
+[[session]]
+name = "Downloads 📥"
+path = "~/Downloads"
+startup_command = "ls"
+
+# open a file
+[[session]]
+name = "tmux config"
+path = "~/.config/tmux/"
+startup_command = "nvim tmux.conf"
+
+[[session]]
+name = "hyprland config"
+path = "~/.config/hypr/"
+startup_command = "nvim hyprland.conf"
+
+[[session]]
+name = "neovim config"
+path = "~/.config/nvim/lua/"
+startup_command = "nvim"
+
+# run a script to startup a node project
+# [[session]]
+# path = "~/c/joshmedeski.com"
+# startup_script = "~/.config/sesh/scripts/node_dev"
