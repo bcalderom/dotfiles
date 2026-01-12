@@ -1,10 +1,24 @@
+[[session]]
+name = "ssh connect"
+path = "~/"
+startup_command = "ssf "
+
+[[session]]
+name = "obsidian note"
+path = "~/Obsidian/engineer/0 Inbox/"
+startup_command = "onn"
+
 # open the file manager
 [[session]]
 name = "Downloads 📥"
 path = "~/Downloads"
 startup_command = "ls"
 
-# open a file
+[[session]]
+name = "neovim config"
+path = "~/.config/nvim/lua/"
+startup_command = "nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'"
+
 [[session]]
 name = "tmux config"
 path = "~/.config/tmux/"
@@ -14,16 +28,6 @@ startup_command = "nvim tmux.conf"
 name = "hyprland config"
 path = "~/.config/hypr/"
 startup_command = "nvim hyprland.conf"
-
-[[session]]
-name = "neovim config"
-path = "~/.config/nvim/lua/"
-startup_command = "nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'"
-
-[[session]]
-name = "New Obsidian Note"
-path = "~/Obsidian/engineer/0 Inbox/"
-startup_command = "onn"
 
 # run a script to startup a node project
 # [[session]]
