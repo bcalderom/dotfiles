@@ -244,6 +244,7 @@ eval "$(zoxide init zsh)"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
 
 # Key binding for sesh sessions
+[[ -f "$HOME/dotfiles/scripts/sesh-sessions" ]] && source "$HOME/dotfiles/scripts/sesh-sessions"
 zle     -N             sesh-sessions
 bindkey -M emacs '\es' sesh-sessions
 bindkey -M vicmd '\es' sesh-sessions
