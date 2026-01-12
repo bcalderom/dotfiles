@@ -123,3 +123,5 @@ lambda_package/
 .config/ktrashrc
 .config/heidisql/
 .config/spotify/
+# Neovim
+.config/nvim/lazy-lock.json
