@@ -1,7 +1,7 @@
 [[session]]
 name = "ssh connect"
 path = "~/"
-startup_command = "ssf "
+startup_command = "bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"ssh-$(date +%d-%H%M%S)\"; fi; exec ssf'"
 
 [[session]]
 name = "obsidian note"
