@@ -93,14 +93,6 @@ zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
 
-
-# ~~~~~~~~~~~~~~~ ls function ~~~~~~~~~~~~~~~~~~~~~~~~
-
-ls() {
-  command ls --group-directories-first --color=auto "$@"
-}
-
-
 # ~~~~~~~~~~~~~~~ Path configuration ~~~~~~~~~~~~~~~~~~~~~~~~
 
 setopt extended_glob null_glob
@@ -250,3 +242,9 @@ eval "$(zoxide init zsh)"
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
 #export PATH="/home/boris/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
+
+# Key binding for sesh sessions
+zle     -N             sesh-sessions
+bindkey -M emacs '\es' sesh-sessions
+bindkey -M vicmd '\es' sesh-sessions
+bindkey -M viins '\es' sesh-sessions
