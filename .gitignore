@@ -125,3 +125,4 @@ lambda_package/
 .config/spotify/
 # Neovim
 .config/nvim/lazy-lock.json
+.config/gh/
