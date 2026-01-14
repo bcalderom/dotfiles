@@ -41,8 +41,8 @@ Options:
 
 Keys (in selector):
   Enter   ssh
-  Ctrl-S  scp
-  Ctrl-R  rsync
+  Ctrl-S  scp (upload/download)
+  Ctrl-R  rsync (upload/download)
   Ctrl-T  tmux new-window (if inside tmux)
   Ctrl-P  ping/port test
   Ctrl-K  copy "ssh <alias>"
@@ -195,6 +195,72 @@ port_test() {
   else
     timeout 2 bash -c ">/dev/tcp/$host/22" >/dev/null 2>&1 && echo "✅ TCP 22 open on $host" || echo "❌ TCP 22 closed/unreachable on $host"
   fi
+}
+
+trim_path() {
+  local p="$1"
+  p="${p#${p%%[![:space:]]*}}"
+  p="${p%${p##*[![:space:]]}}"
+  printf "%s" "$p"
+}
+
+expand_remote_path() {
+  local remote_path="$1"
+  remote_path="$(trim_path "$remote_path")"
+  if [[ "$remote_path" == "~" ]]; then
+    printf "%s" "$remote_path"
+  elif [[ "${remote_path:0:2}" == "~/" ]]; then
+    printf "%s" "$remote_path"
+  elif [[ "${remote_path:0:1}" == "/" ]]; then
+    printf "%s" "$remote_path"
+  else
+    printf "%s" "~/${remote_path}"
+  fi
+}
+
+expand_local_path() {
+  local local_path="$1"
+  local_path="$(trim_path "$local_path")"
+  if [[ "$local_path" == "~" ]]; then
+    printf "%s" "$HOME"
+  elif [[ "${local_path:0:2}" == "~/" ]]; then
+    printf "%s" "$HOME/${local_path:2}"
+  else
+    printf "%s" "$local_path"
+  fi
+}
+
+resolve_local_path() {
+  local local_path="$1"
+  local_path="$(trim_path "$local_path")"
+  local_path="$(expand_local_path "$local_path")"
+  if [[ "$local_path" == "~" ]]; then
+    local_path="$HOME"
+  elif [[ "${local_path:0:2}" == "~/" ]]; then
+    local_path="$HOME/${local_path:2}"
+  fi
+  if [[ "$local_path" == /* ]]; then
+    printf "%s" "$local_path"
+  else
+    if need_cmd realpath; then
+      realpath -m -- "$local_path" 2>/dev/null || printf "%s" "$(pwd -P)/$local_path"
+    else
+      printf "%s" "$(pwd -P)/$local_path"
+    fi
+  fi
+}
+
+print_shell_escaped_cmd() {
+  local -a args=("$@")
+  local i
+  for i in "${!args[@]}"; do
+    if [[ "$i" -eq 0 ]]; then
+      printf "%q" "${args[$i]}"
+    else
+      printf " %q" "${args[$i]}"
+    fi
+  done
+  printf "\n"
 }
 
 # Internal dump mode: base TSV without display formatting
@@ -380,23 +446,59 @@ run_action() {
       ;;
     ctrl-s)
       echo "SCP mode for $alias ($user@$host)"
-      read -r -e -p "Local path: " local_path
-      read -r -e -p "Remote path (relative to ~ on remote, or absolute): " remote_path
-      if [[ "$remote_path" == /* ]]; then
-        exec scp -r -- "$local_path" "${alias}:${remote_path}"
-      else
-        exec scp -r -- "$local_path" "${alias}:~/${remote_path}"
-      fi
+      read -r -p "Direction (u=upload, d=download) [u]: " direction
+      direction="${direction:-u}"
+      case "${direction,,}" in
+        u|up|upload)
+          read -r -e -p "Local source path: " local_path
+          read -r -e -p "Remote destination path (absolute or relative to ~): " remote_path
+          [[ -n "${local_path}" ]] || die "Local source path is required"
+          [[ -n "${remote_path}" ]] || die "Remote destination path is required"
+          local_path="$(resolve_local_path "$local_path")"
+          remote_path="$(expand_remote_path "$remote_path")"
+          exec scp -r -- "$local_path" "${alias}:${remote_path}"
+          ;;
+        d|down|download)
+          read -r -e -p "Remote source path (absolute or relative to ~): " remote_path
+          read -r -e -p "Local destination path [.]: " local_path
+          local_path="${local_path:-.}"
+          [[ -n "${remote_path}" ]] || die "Remote source path is required"
+          local_path="$(resolve_local_path "$local_path")"
+          remote_path="$(expand_remote_path "$remote_path")"
+          exec scp -r -- "${alias}:${remote_path}" "$local_path"
+          ;;
+        *)
+          die "Invalid direction: $direction"
+          ;;
+      esac
       ;;
     ctrl-r)
       echo "RSYNC mode for $alias ($user@$host)"
-      read -r -e -p "Local path: " local_path
-      read -r -e -p "Remote path (relative to ~ on remote, or absolute): " remote_path
-      if [[ "$remote_path" == /* ]]; then
-        exec rsync -avz --progress -- "$local_path" "${alias}:${remote_path}"
-      else
-        exec rsync -avz --progress -- "$local_path" "${alias}:~/${remote_path}"
-      fi
+      read -r -p "Direction (u=upload, d=download) [u]: " direction
+      direction="${direction:-u}"
+      case "${direction,,}" in
+        u|up|upload)
+          read -r -e -p "Local source path: " local_path
+          read -r -e -p "Remote destination path (absolute or relative to ~): " remote_path
+          [[ -n "${local_path}" ]] || die "Local source path is required"
+          [[ -n "${remote_path}" ]] || die "Remote destination path is required"
+          local_path="$(resolve_local_path "$local_path")"
+          remote_path="$(expand_remote_path "$remote_path")"
+          exec rsync -avz --progress -- "$local_path" "${alias}:${remote_path}"
+          ;;
+        d|down|download)
+          read -r -e -p "Remote source path (absolute or relative to ~): " remote_path
+          read -r -e -p "Local destination path [.]: " local_path
+          local_path="${local_path:-.}"
+          [[ -n "${remote_path}" ]] || die "Remote source path is required"
+          local_path="$(resolve_local_path "$local_path")"
+          remote_path="$(expand_remote_path "$remote_path")"
+          exec rsync -avz --progress -- "${alias}:${remote_path}" "$local_path"
+          ;;
+        *)
+          die "Invalid direction: $direction"
+          ;;
+      esac
       ;;
     *)
       die "Unknown action: $action"
@@ -409,6 +511,42 @@ main() {
   if [[ "${1:-}" == "--_dump" ]]; then
     shift
     dump_mode "${1:-$CONFIG}"
+    exit 0
+  fi
+
+  # Hidden/internal option for testing: emit the scp command as a shell-escaped string
+  if [[ "${1:-}" == "--_scp_cmd" ]]; then
+    shift
+    local alias="${1:-}" direction="${2:-}" local_path="${3:-}" remote_path="${4:-}"
+    [[ -n "$alias" ]] || die "Missing alias"
+    [[ -n "$direction" ]] || die "Missing direction (upload/download)"
+    [[ -n "$local_path" ]] || die "Missing local path"
+    [[ -n "$remote_path" ]] || die "Missing remote path"
+    local_path="$(resolve_local_path "$local_path")"
+    remote_path="$(expand_remote_path "$remote_path")"
+    case "${direction,,}" in
+      u|up|upload) print_shell_escaped_cmd scp -r -- "$local_path" "${alias}:${remote_path}" ;;
+      d|down|download) print_shell_escaped_cmd scp -r -- "${alias}:${remote_path}" "$local_path" ;;
+      *) die "Invalid direction: $direction" ;;
+    esac
+    exit 0
+  fi
+
+  # Hidden/internal option for testing: emit the rsync command as a shell-escaped string
+  if [[ "${1:-}" == "--_rsync_cmd" ]]; then
+    shift
+    local alias="${1:-}" direction="${2:-}" local_path="${3:-}" remote_path="${4:-}"
+    [[ -n "$alias" ]] || die "Missing alias"
+    [[ -n "$direction" ]] || die "Missing direction (upload/download)"
+    [[ -n "$local_path" ]] || die "Missing local path"
+    [[ -n "$remote_path" ]] || die "Missing remote path"
+    local_path="$(resolve_local_path "$local_path")"
+    remote_path="$(expand_remote_path "$remote_path")"
+    case "${direction,,}" in
+      u|up|upload) print_shell_escaped_cmd rsync -avz --progress -- "$local_path" "${alias}:${remote_path}" ;;
+      d|down|download) print_shell_escaped_cmd rsync -avz --progress -- "${alias}:${remote_path}" "$local_path" ;;
+      *) die "Invalid direction: $direction" ;;
+    esac
     exit 0
   fi
 
@@ -478,7 +616,7 @@ main() {
   local selection keys line action display alias host user grp role variant sep fzf_header
 
   sep="$(printf '%*s' "${COLUMNS:-80}" '' | tr ' ' '-')"
-  fzf_header="${sep}"$'\n'"Enter: ssh | Ctrl-S: scp | Ctrl-R: rsync | Ctrl-T: tmux"$'\n'"Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host"$'\n'"Ctrl-I: copy host | Ctrl-E: edit"
+  fzf_header="${sep}"$'\n'"Enter: ssh | Ctrl-S: scp (upload/download) | Ctrl-R: rsync (upload/download) | Ctrl-T: tmux"$'\n'"Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host"$'\n'"Ctrl-I: copy host | Ctrl-E: edit"
   selection="$(printf "%s\n" "$data" | fzf \
     --prompt="SSH> " \
     --query="$INITIAL_QUERY" \
