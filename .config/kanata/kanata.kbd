@@ -1,6 +1,12 @@
 (defcfg
   process-unmapped-keys yes
   log-layer-changes no
+
+  linux-dev-names-include (
+    "AT Translated Set 2 keyboard"
+    "Bluetooth Keyboard"
+    "Logitech Wireless Keyboard PID:4023"
+  )
 )
 
 (defsrc
