@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SSF_SCRIPT="${SCRIPT_DIR}/ssf"
+SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+SSF_SCRIPT="${SCRIPTS_DIR}/ssf"
 
 if [[ ! -f "${SSF_SCRIPT}" ]]; then
   echo "Missing: ${SSF_SCRIPT}" >&2

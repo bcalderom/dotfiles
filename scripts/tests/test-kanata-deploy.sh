@@ -17,21 +17,12 @@ trap 'rm -rf "${TMPDIR}"' EXIT
 export HOME="${TMPDIR}/home"
 mkdir -p "${HOME}"
 
-DEST_ROOT="${TMPDIR}/root"
-mkdir -p "${DEST_ROOT}"
-export KANATA_DEST_ROOT="${DEST_ROOT}"
-export SUDO=""
-
 MOCK_BIN="${TMPDIR}/bin"
 mkdir -p "${MOCK_BIN}"
 
 SYSTEMCTL_LOG="${TMPDIR}/systemctl.log"
 : > "${SYSTEMCTL_LOG}"
 export SYSTEMCTL_LOG
-
-MODPROBE_LOG="${TMPDIR}/modprobe.log"
-: > "${MODPROBE_LOG}"
-export MODPROBE_LOG
 
 cat > "${MOCK_BIN}/systemctl" <<'EOF'
 #!/usr/bin/env bash
@@ -41,15 +32,6 @@ printf '\n' >> "${SYSTEMCTL_LOG}"
 exit 0
 EOF
 chmod +x "${MOCK_BIN}/systemctl"
-
-cat > "${MOCK_BIN}/modprobe" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%q ' "$0" "$@" >> "${MODPROBE_LOG}"
-printf '\n' >> "${MODPROBE_LOG}"
-exit 0
-EOF
-chmod +x "${MOCK_BIN}/modprobe"
 
 export PATH="${MOCK_BIN}:${PATH}"
 
@@ -75,57 +57,35 @@ assert_mode() {
 echo "==> install"
 bash "${DEPLOY_SCRIPT}" --install
 
-assert_file_exists "${DEST_ROOT}/etc/systemd/system/kanata.service"
-assert_file_exists "${DEST_ROOT}/etc/kanata/kanata.kbd"
-assert_file_exists "${DEST_ROOT}/etc/modules-load.d/uinput.conf"
+assert_file_exists "${HOME}/.config/systemd/user/kanata.service"
+assert_mode "${HOME}/.config/systemd/user/kanata.service" 644
 
-assert_mode "${DEST_ROOT}/etc/systemd/system/kanata.service" 644
-assert_mode "${DEST_ROOT}/etc/kanata/kanata.kbd" 644
-assert_mode "${DEST_ROOT}/etc/modules-load.d/uinput.conf" 644
-
-if grep -q -- "dev-uinput.device" "${DEST_ROOT}/etc/systemd/system/kanata.service"; then
-  echo "Unexpected dependency on dev-uinput.device in kanata.service" >&2
-  exit 1
-fi
-
-grep -q -- "uinput" "${DEST_ROOT}/etc/modules-load.d/uinput.conf"
-
-grep -q -- "daemon-reload" "${SYSTEMCTL_LOG}"
-grep -q -- "enable --now kanata.service" "${SYSTEMCTL_LOG}"
-
-grep -q -- "uinput" "${MODPROBE_LOG}"
+grep -q -- "--user daemon-reload" "${SYSTEMCTL_LOG}"
+grep -q -- "--user enable --now kanata.service" "${SYSTEMCTL_LOG}"
 
 : > "${SYSTEMCTL_LOG}"
 
 echo "==> update"
 bash "${DEPLOY_SCRIPT}" --update
 
-grep -q -- "daemon-reload" "${SYSTEMCTL_LOG}"
-grep -q -- "restart kanata.service" "${SYSTEMCTL_LOG}"
+grep -q -- "--user daemon-reload" "${SYSTEMCTL_LOG}"
+grep -q -- "--user restart kanata.service" "${SYSTEMCTL_LOG}"
 
 : > "${SYSTEMCTL_LOG}"
 
 echo "==> stow-like symlinks"
-DEST_STOW="${TMPDIR}/root-stow"
-mkdir -p "${DEST_STOW}/etc/systemd/system" "${DEST_STOW}/etc/kanata" "${DEST_STOW}/etc/modules-load.d"
+HOME_STOW="${TMPDIR}/home-stow"
+mkdir -p "${HOME_STOW}/.config/systemd/user"
+ln -sf "${DOTFILES_DIR}/.config/systemd/user/kanata.service" "${HOME_STOW}/.config/systemd/user/kanata.service"
 
-ln -sf "${DOTFILES_DIR}/.config/systemd/kanata.service" "${DEST_STOW}/etc/systemd/system/kanata.service"
-ln -sf "${DOTFILES_DIR}/.config/kanata/kanata.kbd" "${DEST_STOW}/etc/kanata/kanata.kbd"
-printf "uinput\n" > "${DEST_STOW}/etc/modules-load.d/uinput.conf"
+HOME="${HOME_STOW}" bash "${DEPLOY_SCRIPT}" --update
 
-KANATA_DEST_ROOT="${DEST_STOW}" bash "${DEPLOY_SCRIPT}" --update
-
-if [[ ! -L "${DEST_STOW}/etc/systemd/system/kanata.service" ]]; then
-  echo "Expected symlink to remain: /etc/systemd/system/kanata.service" >&2
+if [[ ! -L "${HOME_STOW}/.config/systemd/user/kanata.service" ]]; then
+  echo "Expected symlink to remain: kanata.service" >&2
   exit 1
 fi
 
-if [[ ! -L "${DEST_STOW}/etc/kanata/kanata.kbd" ]]; then
-  echo "Expected symlink to remain: /etc/kanata/kanata.kbd" >&2
-  exit 1
-fi
-
-grep -q -- "daemon-reload" "${SYSTEMCTL_LOG}"
-grep -q -- "restart kanata.service" "${SYSTEMCTL_LOG}"
+grep -q -- "--user daemon-reload" "${SYSTEMCTL_LOG}"
+grep -q -- "--user restart kanata.service" "${SYSTEMCTL_LOG}"
 
 echo "OK"

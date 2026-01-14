@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-ONN_SCRIPT="${SCRIPT_DIR}/onn"
+SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+ONN_SCRIPT="${SCRIPTS_DIR}/onn"
 
 if [[ ! -f "${ONN_SCRIPT}" ]]; then
   echo "Missing: ${ONN_SCRIPT}" >&2
@@ -176,15 +177,15 @@ run_and_check() {
   assert_file_contains "${out_file}" "title: ${title}"
 }
 
-run_and_check "--meeting" "Weekly Sync" "TEMPLATE:meeting" "weekly-sync"
-run_and_check "--person" "Ada Lovelace" "TEMPLATE:person" "ada-lovelace"
-run_and_check "--project" "My Project" "TEMPLATE:project" "my-project"
-run_and_check "--incident" "DB Outage" "TEMPLATE:incident" "db-outage"
-run_and_check "--improvement" "Make Deploy Safer" "TEMPLATE:improvement" "make-deploy-safer"
-run_and_check "--decision" "Use Postgres" "TEMPLATE:decision" "use-postgres"
-run_and_check "--enablement" "Improve Onboarding" "TEMPLATE:enablement" "improve-onboarding"
-run_and_check "--operational" "Rotate Secrets" "TEMPLATE:operational" "rotate-secrets"
-run_and_check "--commitment" "Write Weekly Update" "TEMPLATE:commitment" "write-weekly-update"
+run_and_check "--meeting" "Weekly Sync" "TEMPLATE:meeting" "weekly-sync" "${ONN_MEETING_DIR}"
+run_and_check "--person" "Ada Lovelace" "TEMPLATE:person" "ada-lovelace" "${VAULT}/3 Resources/people"
+run_and_check "--project" "My Project" "TEMPLATE:project" "my-project" "${VAULT}/4 Companies/Invexsa/Projects"
+run_and_check "--incident" "DB Outage" "TEMPLATE:incident" "db-outage" "${VAULT}/4 Companies/Invexsa/Incidents"
+run_and_check "--improvement" "Make Deploy Safer" "TEMPLATE:improvement" "make-deploy-safer" "${VAULT}/4 Companies/Invexsa/Improvements"
+run_and_check "--decision" "Use Postgres" "TEMPLATE:decision" "use-postgres" "${VAULT}/4 Companies/Invexsa/Decisions"
+run_and_check "--enablement" "Improve Onboarding" "TEMPLATE:enablement" "improve-onboarding" "${VAULT}/4 Companies/Invexsa/Enablement"
+run_and_check "--operational" "Rotate Secrets" "TEMPLATE:operational" "rotate-secrets" "${VAULT}/4 Companies/Invexsa/Operations"
+run_and_check "--commitment" "Write Weekly Update" "TEMPLATE:commitment" "write-weekly-update" "${VAULT}/4 Companies/Invexsa/Commitments"
 
 CUSTOM_TEMPLATE="${TMPDIR}/custom.md"
 cat > "${CUSTOM_TEMPLATE}" <<EOF
