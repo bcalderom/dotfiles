@@ -1,18 +1,28 @@
 [[session]]
 name = "ssh connect"
 path = "~/"
-startup_command = "bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"ssh-$(date +%d-%H%M%S)\"; fi; exec ssf'"
+startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"ssh-$(date +%d-%H%M%S)\"; fi; exec ssf'; clear"
 
 [[session]]
-name = "obsidian note"
+name = "new note"
 path = "~/Obsidian/engineer/0 Inbox/"
 startup_command = "onn"
+
+[[session]]
+name = "vault"
+path = "~/Obsidian/engineer/"
+startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'; clear"
 
 # open the file manager
 [[session]]
 name = "Downloads 📥"
 path = "~/Downloads"
 startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() local telescope = require(\"telescope\") pcall(telescope.load_extension, \"file_browser\") telescope.extensions.file_browser.file_browser({ path = vim.loop.cwd(), cwd = vim.loop.cwd(), hidden = true, respect_gitignore = false, grouped = true, initial_mode = \"insert\" }) end)'; clear"
+
+[[session]]
+name = "dotfiles"
+path = "~/dotfiles/"
+startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'; clear"
 
 [[session]]
 name = "zshrc config"
@@ -33,6 +43,11 @@ startup_command = "nvim tmux.conf"
 name = "hyprland config"
 path = "~/.config/hypr/"
 startup_command = "nvim hyprland.conf"
+
+[[session]]
+name = "sesh config"
+path = "~/.config/sesh/"
+startup_command = "nvim sesh.toml"
 
 # run a script to startup a node project
 # [[session]]
