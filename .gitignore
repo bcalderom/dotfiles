@@ -126,3 +126,6 @@ lambda_package/
 # Neovim
 .config/nvim/lazy-lock.json
 .config/gh/
+.config/lazygit/config.yml
+.config/fish/conf.d/uv.env.fish
+.config/uv/uv-receipt.json
