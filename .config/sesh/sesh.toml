@@ -6,7 +6,7 @@ startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-se
 [[session]]
 name = "new note"
 path = "~/Obsidian/engineer/0 Inbox/"
-startup_command = "onn"
+startup_command = "clear; onn; clear"
 
 [[session]]
 name = "vault"
