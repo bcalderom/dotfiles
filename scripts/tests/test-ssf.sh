@@ -79,4 +79,48 @@ if [[ "${server_col}" != "data" ]]; then
   exit 1
 fi
 
+scp_upload_rel="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups upload "./local file.txt" "docs/report.txt")"
+if [[ "${scp_upload_rel}" != *"scp"*"-r"*"--"* ]]; then
+  echo "Expected scp upload command to include scp -r --, got: ${scp_upload_rel}" >&2
+  exit 1
+fi
+if [[ "${scp_upload_rel}" != *"cenizas_back_pybackups:\~/docs/report.txt"* ]]; then
+  echo "Expected remote path to be expanded to ~/ for relative path (shell-escaped), got: ${scp_upload_rel}" >&2
+  exit 1
+fi
+
+scp_download_abs="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups download "./dest" "/var/log/syslog")"
+if [[ "${scp_download_abs}" != *"cenizas_back_pybackups:/var/log/syslog"* ]]; then
+  echo "Expected absolute remote path to be preserved for download, got: ${scp_download_abs}" >&2
+  exit 1
+fi
+
+rsync_upload_rel="$(bash "${SSF_SCRIPT}" --_rsync_cmd cenizas_back_pybackups upload "./localdir" "backups")"
+if [[ "${rsync_upload_rel}" != *"rsync"*"-avz"*"--progress"*"--"* ]]; then
+  echo "Expected rsync upload command to include rsync -avz --progress --, got: ${rsync_upload_rel}" >&2
+  exit 1
+fi
+if [[ "${rsync_upload_rel}" != *"cenizas_back_pybackups:\~/backups"* ]]; then
+  echo "Expected remote path to be expanded to ~/ for rsync upload (shell-escaped), got: ${rsync_upload_rel}" >&2
+  exit 1
+fi
+
+rsync_download_abs="$(bash "${SSF_SCRIPT}" --_rsync_cmd cenizas_back_pybackups download "./dest" "/etc/hosts")"
+if [[ "${rsync_download_abs}" != *"cenizas_back_pybackups:/etc/hosts"* ]]; then
+  echo "Expected absolute remote path to be preserved for rsync download, got: ${rsync_download_abs}" >&2
+  exit 1
+fi
+
+scp_download_local_tilde="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups download "~/Desarrollos/mysql-backups-s3/" "/tmp/profile.out")"
+if [[ "${scp_download_local_tilde}" != *"${HOME}"*"Desarrollos/mysql-backups-s3/"* ]]; then
+  echo "Expected local ~ path to be expanded to HOME for scp download, got: ${scp_download_local_tilde}" >&2
+  exit 1
+fi
+
+rsync_upload_local_tilde="$(bash "${SSF_SCRIPT}" --_rsync_cmd cenizas_back_pybackups upload "~/some dir" "backups")"
+if [[ "${rsync_upload_local_tilde}" != *"${HOME}"*"some\ dir"* ]]; then
+  echo "Expected local ~ path to be expanded to HOME for rsync upload, got: ${rsync_upload_local_tilde}" >&2
+  exit 1
+fi
+
 echo "OK"
