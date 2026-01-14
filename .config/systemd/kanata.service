@@ -4,31 +4,11 @@ Documentation=https://github.com/jtroo/kanata
 After=systemd-modules-load.service
 Wants=systemd-modules-load.service
 
-# Ensure uinput exists before starting
-After=dev-uinput.device
-Wants=dev-uinput.device
-
 [Service]
 Type=simple
 ExecStart=/usr/bin/kanata --cfg /etc/kanata/kanata.kbd
 Restart=on-failure
 RestartSec=0.5
-
-# Hardening (keep it compatible with /dev/uinput + /dev/input)
-NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ProtectHome=true
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-RestrictRealtime=yes
-SystemCallArchitectures=native
-
-# IMPORTANT: don't block device access
-PrivateDevices=no
 
 [Install]
 WantedBy=multi-user.target

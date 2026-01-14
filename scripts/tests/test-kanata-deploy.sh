@@ -83,6 +83,11 @@ assert_mode "${DEST_ROOT}/etc/systemd/system/kanata.service" 644
 assert_mode "${DEST_ROOT}/etc/kanata/kanata.kbd" 644
 assert_mode "${DEST_ROOT}/etc/modules-load.d/uinput.conf" 644
 
+if grep -q -- "dev-uinput.device" "${DEST_ROOT}/etc/systemd/system/kanata.service"; then
+  echo "Unexpected dependency on dev-uinput.device in kanata.service" >&2
+  exit 1
+fi
+
 grep -q -- "uinput" "${DEST_ROOT}/etc/modules-load.d/uinput.conf"
 
 grep -q -- "daemon-reload" "${SYSTEMCTL_LOG}"
