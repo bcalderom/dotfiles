@@ -36,6 +36,25 @@ have() {
   command -v "$1" >/dev/null 2>&1
 }
 
+require_apps() {
+  local missing=()
+  local app
+
+  for app in "$@"; do
+    if ! have "${app}"; then
+      missing+=("${app}")
+    fi
+  done
+
+  if (( ${#missing[@]} > 0 )); then
+    local label="tools"
+    if (( ${#missing[@]} == 1 )); then
+      label="tool"
+    fi
+    die "Missing required ${label}: ${missing[*]}"
+  fi
+}
+
 validate_percent() {
   local value="$1"
   local name="$2"
@@ -90,7 +109,7 @@ split_pane() {
   printf '%s' "${pane}"
 }
 
-have tmux || die "tmux is required but not installed."
+require_apps tmux fzf nvim opencode
 
 if [[ -z "${TMUX:-}" ]]; then
   echo "tmux is not running. Launching tmux..." >&2
@@ -135,8 +154,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-have fzf || die "fzf is required but not installed."
-have nvim || die "nvim is required but not installed."
 
 if [[ -z "${ROOT}" ]]; then
   die "--root cannot be empty."
