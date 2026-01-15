@@ -9,8 +9,8 @@ set -euo pipefail
 
 ROOT="${PWD}"
 DEPTH="1"
-LEFT_PERCENT="35"
-RIGHT_PERCENT="65"
+LEFT_PERCENT="40"
+RIGHT_PERCENT="60"
 RIGHT_TOP_PERCENT="80"
 RIGHT_BOTTOM_PERCENT="20"
 DEBUG="false"
@@ -46,9 +46,9 @@ require_apps() {
     fi
   done
 
-  if (( ${#missing[@]} > 0 )); then
+  if ((${#missing[@]} > 0)); then
     local label="tools"
-    if (( ${#missing[@]} == 1 )); then
+    if ((${#missing[@]} == 1)); then
       label="tool"
     fi
     die "Missing required ${label}: ${missing[*]}"
@@ -63,7 +63,7 @@ validate_percent() {
     die "${name} must be an integer percentage."
   fi
 
-  if (( value < 1 || value > 99 )); then
+  if ((value < 1 || value > 99)); then
     die "${name} must be between 1 and 99."
   fi
 }
@@ -132,28 +132,27 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --root)
-      ROOT="${2:-}"
-      shift 2
-      ;;
-    --depth)
-      DEPTH="${2:-}"
-      shift 2
-      ;;
-    --debug)
-      DEBUG="true"
-      shift 1
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      die "Unknown argument: $1"
-      ;;
+  --root)
+    ROOT="${2:-}"
+    shift 2
+    ;;
+  --depth)
+    DEPTH="${2:-}"
+    shift 2
+    ;;
+  --debug)
+    DEBUG="true"
+    shift 1
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    die "Unknown argument: $1"
+    ;;
   esac
 done
-
 
 if [[ -z "${ROOT}" ]]; then
   die "--root cannot be empty."
@@ -172,11 +171,11 @@ validate_percent "${RIGHT_PERCENT}" "RIGHT_PERCENT"
 validate_percent "${RIGHT_TOP_PERCENT}" "RIGHT_TOP_PERCENT"
 validate_percent "${RIGHT_BOTTOM_PERCENT}" "RIGHT_BOTTOM_PERCENT"
 
-if (( LEFT_PERCENT + RIGHT_PERCENT != 100 )); then
+if ((LEFT_PERCENT + RIGHT_PERCENT != 100)); then
   die "LEFT_PERCENT and RIGHT_PERCENT must sum to 100."
 fi
 
-if (( RIGHT_TOP_PERCENT + RIGHT_BOTTOM_PERCENT != 100 )); then
+if ((RIGHT_TOP_PERCENT + RIGHT_BOTTOM_PERCENT != 100)); then
   die "RIGHT_TOP_PERCENT and RIGHT_BOTTOM_PERCENT must sum to 100."
 fi
 
@@ -217,9 +216,10 @@ top_right_pane="${right_pane}"
 dir_escaped="$(escape_shell "${DIR}")"
 
 tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-tmux send-keys -t "${left_pane}" "nvim ." C-m
+tmux send-keys -t "${left_pane}" "opencode" C-m
 
 tmux send-keys -t "${top_right_pane}" "cd -- ${dir_escaped}" C-m
+tmux send-keys -t "${top_right_pane}" "nvim ." C-m
 
 tmux send-keys -t "${bottom_right_pane}" "cd -- ${dir_escaped}" C-m
 
