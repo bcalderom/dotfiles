@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="${PWD}"
-DEPTH="1"
+DEPTH="2"
 LEFT_PERCENT="40"
 RIGHT_PERCENT="60"
 RIGHT_TOP_PERCENT="80"
