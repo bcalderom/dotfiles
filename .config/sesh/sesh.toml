@@ -1,4 +1,9 @@
 [[session]]
+name = "tds"
+path = "~/"
+startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"tds-$(date +%d-%H%M%S)\"; fi; exec tds'; clear"
+
+[[session]]
 name = "ssh connect"
 path = "~/"
 startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"ssh-$(date +%d-%H%M%S)\"; fi; exec ssf'; clear"
@@ -15,7 +20,7 @@ startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(func
 
 # open the file manager
 [[session]]
-name = "Downloads 📥"
+name = "Downloads"
 path = "~/Downloads"
 startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() local telescope = require(\"telescope\") pcall(telescope.load_extension, \"file_browser\") telescope.extensions.file_browser.file_browser({ path = vim.loop.cwd(), cwd = vim.loop.cwd(), hidden = true, respect_gitignore = false, grouped = true, initial_mode = \"insert\" }) end)'; clear"
 
