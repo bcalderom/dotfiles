@@ -129,3 +129,4 @@ lambda_package/
 .config/lazygit/config.yml
 .config/fish/conf.d/uv.env.fish
 .config/uv/uv-receipt.json
+.config/menus/
