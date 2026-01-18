@@ -161,12 +161,11 @@ alias gls='git log --oneline'
 alias lg='lazygit'
 
 # pacman
-alias pacs='sudo pacman -S'
+alias i='sudo pacman -S'
+alias u='sudo pacman -Rns'
 alias syu='sudo pacman -Syu'
-alias rns='sudo pacman -Rns'
 
 # yay
-#alias yay='yes | yay -Syu'
 alias yayu='yay -Syu'
 
 # Finding files
