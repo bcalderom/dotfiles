@@ -1,4 +1,9 @@
 [[session]]
+name = "terminal"
+path = "~/"
+startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"terminal-$(date +%d-%H%M%S)\"; fi'; clear"
+
+[[session]]
 name = "tds"
 path = "~/"
 startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"tds-$(date +%d-%H%M%S)\"; fi; exec tds'; clear"
