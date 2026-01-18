@@ -130,3 +130,4 @@ lambda_package/
 .config/fish/conf.d/uv.env.fish
 .config/uv/uv-receipt.json
 .config/menus/
+.config/btop/
