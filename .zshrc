@@ -184,6 +184,7 @@ alias la='ls -lahtr'
 alias dot='cd ~/dotfiles'
 alias scripts='cd ~/dotfiles/scripts/'
 alias hypr='nvim ~/dotfiles/.config/hypr/hyprland.conf' 
+alias dev='cd ~/Desarrollos'
 
 # Changing "ls" to "eza"
 alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
@@ -248,3 +249,9 @@ zle     -N             sesh-sessions
 bindkey -M emacs '\es' sesh-sessions
 bindkey -M vicmd '\es' sesh-sessions
 bindkey -M viins '\es' sesh-sessions
+
+
+# pyenv integration
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
