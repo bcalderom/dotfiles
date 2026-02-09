@@ -123,4 +123,69 @@ if [[ "${rsync_upload_local_tilde}" != *"${HOME}"*"some\ dir"* ]]; then
   exit 1
 fi
 
+FAKE_BIN="${TMPDIR}/bin"
+mkdir -p "${FAKE_BIN}"
+
+cat > "${FAKE_BIN}/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${SSF_TEST_SSH_ARGS_FILE:-}" ]]; then
+  printf '%s\n' "$*" > "${SSF_TEST_SSH_ARGS_FILE}"
+fi
+printf '%s\n' "line one"
+printf '%s\n' "line two"
+EOF
+chmod +x "${FAKE_BIN}/ssh"
+
+CLIP_FILE="${TMPDIR}/clipboard.txt"
+SSH_ARGS_FILE="${TMPDIR}/ssh-args.txt"
+cat > "${FAKE_BIN}/wl-copy" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cat > "${SSF_TEST_CLIP_FILE}"
+EOF
+chmod +x "${FAKE_BIN}/wl-copy"
+
+copy_output="$({
+  PATH="${FAKE_BIN}:${PATH}" SSF_TEST_CLIP_FILE="${CLIP_FILE}" SSF_TEST_SSH_ARGS_FILE="${SSH_ARGS_FILE}" bash "${SSF_SCRIPT}" --_copy_remote_stdout cenizas_back_pybackups "sudo crontab -l -u wisemin"
+} 2>&1)"
+
+if [[ "${copy_output}" != *"Copied stdout from remote command on cenizas_back_pybackups"* ]]; then
+  echo "Expected copy_remote_stdout success message, got: ${copy_output}" >&2
+  exit 1
+fi
+if [[ "${copy_output}" != *"Interactive sudo detected; enter remote password if prompted."* ]]; then
+  echo "Expected interactive sudo notice, got: ${copy_output}" >&2
+  exit 1
+fi
+
+ssh_args="$(cat "${SSH_ARGS_FILE}")"
+if [[ "${ssh_args}" != *"-tt"* ]]; then
+  echo "Expected sudo command to use ssh -tt, got: ${ssh_args}" >&2
+  exit 1
+fi
+
+clipboard_contents="$(cat "${CLIP_FILE}")"
+expected_clipboard=$'line one\nline two'
+if [[ "${clipboard_contents}" != "${expected_clipboard}" ]]; then
+  echo "Expected clipboard contents to match remote stdout" >&2
+  printf 'Got:\n%s\n' "${clipboard_contents}" >&2
+  exit 1
+fi
+
+copy_output_no_sudo="$({
+  PATH="${FAKE_BIN}:${PATH}" SSF_TEST_CLIP_FILE="${CLIP_FILE}" SSF_TEST_SSH_ARGS_FILE="${SSH_ARGS_FILE}" bash "${SSF_SCRIPT}" --_copy_remote_stdout cenizas_back_pybackups "crontab -l -u wisemin"
+} 2>&1)"
+
+if [[ "${copy_output_no_sudo}" != *"Copied stdout from remote command on cenizas_back_pybackups"* ]]; then
+  echo "Expected copy_remote_stdout success message for non-sudo command, got: ${copy_output_no_sudo}" >&2
+  exit 1
+fi
+
+ssh_args_no_sudo="$(cat "${SSH_ARGS_FILE}")"
+if [[ "${ssh_args_no_sudo}" == *"-tt"* ]]; then
+  echo "Expected non-sudo command to avoid ssh -tt, got: ${ssh_args_no_sudo}" >&2
+  exit 1
+fi
+
 echo "OK"
