@@ -18,6 +18,7 @@ set -euo pipefail
 #   Ctrl-U    -> copy "user@hostname"
 #   Ctrl-I    -> copy "hostname"
 #   Ctrl-E    -> open ssh config in $EDITOR
+#   Ctrl-Y    -> run remote command and copy stdout
 # - MRU sorting via history file (~/.cache/ssh-fzf-history)
 # - Optional collapsed view (one row per HostName, then pick alias)
 
@@ -49,6 +50,7 @@ Keys (in selector):
   Ctrl-U  copy "user@hostname"
   Ctrl-I  copy "hostname"
   Ctrl-E  edit ssh config
+  Ctrl-Y  run remote command and copy stdout
 EOF
 }
 
@@ -170,22 +172,57 @@ update_history() {
   awk -v A="$alias" '$0!=A && $0!="" {print} END{print A}' "$hist" > "${hist}.tmp" && mv "${hist}.tmp" "$hist"
 }
 
-clipboard_copy() {
-  local text="$1"
+clipboard_copy_stdin() {
   if need_cmd pbcopy; then
-    printf "%s" "$text" | pbcopy
+    pbcopy
     return 0
   elif need_cmd wl-copy; then
-    printf "%s" "$text" | wl-copy
+    wl-copy
     return 0
   elif need_cmd xclip; then
-    printf "%s" "$text" | xclip -selection clipboard
+    xclip -selection clipboard
     return 0
   elif need_cmd xsel; then
-    printf "%s" "$text" | xsel --clipboard --input
+    xsel --clipboard --input
     return 0
   fi
   return 1
+}
+
+clipboard_copy() {
+  local text="$1"
+  printf "%s" "$text" | clipboard_copy_stdin
+}
+
+copy_remote_stdout() {
+  local alias="$1"
+  local remote_cmd="$2"
+  local tmp_out
+
+  tmp_out="$(mktemp)"
+
+  if [[ "$remote_cmd" =~ (^|[[:space:];|&()])sudo([[:space:]]|$) ]]; then
+    echo "Interactive sudo detected; enter remote password if prompted." >&2
+    if ! ssh -tt "$alias" "$remote_cmd" > "$tmp_out"; then
+      rm -f -- "$tmp_out"
+      echo "Failed to run remote command on $alias"
+      return 1
+    fi
+  elif ! ssh "$alias" "$remote_cmd" > "$tmp_out"; then
+    rm -f -- "$tmp_out"
+    echo "Failed to run remote command on $alias"
+    return 1
+  fi
+
+  if ! clipboard_copy_stdin < "$tmp_out"; then
+    rm -f -- "$tmp_out"
+    echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
+    return 1
+  fi
+
+  rm -f -- "$tmp_out"
+
+  echo "Copied stdout from remote command on $alias"
 }
 
 port_test() {
@@ -441,6 +478,12 @@ run_action() {
     ctrl-e)
       exec "$(editor)" "$cfg"
       ;;
+    ctrl-y)
+      local remote_cmd
+      read -r -p "Remote command to run and copy stdout: " remote_cmd
+      [[ -n "$remote_cmd" ]] || die "Remote command is required"
+      copy_remote_stdout "$alias" "$remote_cmd"
+      ;;
     ctrl-p)
       port_test "$host"
       ;;
@@ -557,6 +600,16 @@ main() {
     exit 0
   fi
 
+  # Hidden/internal option for testing: run remote command and copy stdout
+  if [[ "${1:-}" == "--_copy_remote_stdout" ]]; then
+    shift
+    local alias="${1:-}" remote_cmd="${2:-}"
+    [[ -n "$alias" ]] || die "Missing alias"
+    [[ -n "$remote_cmd" ]] || die "Missing remote command"
+    copy_remote_stdout "$alias" "$remote_cmd"
+    exit 0
+  fi
+
   ensure_deps
 
   while [[ $# -gt 0 ]]; do
@@ -616,14 +669,14 @@ main() {
   local selection keys line action display alias host user grp role variant sep fzf_header
 
   sep="$(printf '%*s' "${COLUMNS:-80}" '' | tr ' ' '-')"
-  fzf_header="${sep}"$'\n'"Enter: ssh | Ctrl-S: scp (upload/download) | Ctrl-R: rsync (upload/download) | Ctrl-T: tmux"$'\n'"Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host"$'\n'"Ctrl-I: copy host | Ctrl-E: edit"
+  fzf_header="${sep}"$'\n'"Enter: ssh | Ctrl-S: scp (upload/download) | Ctrl-R: rsync (upload/download) | Ctrl-T: tmux"$'\n'"Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host"$'\n'"Ctrl-I: copy host | Ctrl-E: edit | Ctrl-Y: copy cmd stdout"
   selection="$(printf "%s\n" "$data" | fzf \
     --prompt="SSH> " \
     --query="$INITIAL_QUERY" \
     --delimiter=$'\t' \
     --with-nth=1 \
     --header-lines=1 \
-    --expect=enter,ctrl-s,ctrl-r,ctrl-t,ctrl-p,ctrl-k,ctrl-u,ctrl-i,ctrl-e \
+    --expect=enter,ctrl-s,ctrl-r,ctrl-t,ctrl-p,ctrl-k,ctrl-u,ctrl-i,ctrl-e,ctrl-y \
     --preview="$(preview_cmd "$CONFIG")" \
     --preview-window=right:60%:wrap \
     --header="$fzf_header" \
