@@ -241,9 +241,30 @@ trim_path() {
   printf "%s" "$p"
 }
 
+strip_matching_outer_quotes() {
+  local p="$1"
+  if [[ ${#p} -ge 2 ]]; then
+    if [[ "${p:0:1}" == "'" && "${p: -1}" == "'" ]]; then
+      p="${p:1:${#p}-2}"
+    elif [[ "${p:0:1}" == '"' && "${p: -1}" == '"' ]]; then
+      p="${p:1:${#p}-2}"
+    fi
+  fi
+  printf "%s" "$p"
+}
+
+normalize_local_input_path() {
+  local local_path="$1"
+  local_path="$(trim_path "$local_path")"
+  local_path="$(strip_matching_outer_quotes "$local_path")"
+  local_path="${local_path//\\ / }"
+  printf "%s" "$local_path"
+}
+
 expand_remote_path() {
   local remote_path="$1"
   remote_path="$(trim_path "$remote_path")"
+  remote_path="$(strip_matching_outer_quotes "$remote_path")"
   if [[ "$remote_path" == "~" ]]; then
     printf "%s" "$remote_path"
   elif [[ "${remote_path:0:2}" == "~/" ]]; then
@@ -269,7 +290,7 @@ expand_local_path() {
 
 resolve_local_path() {
   local local_path="$1"
-  local_path="$(trim_path "$local_path")"
+  local_path="$(normalize_local_input_path "$local_path")"
   local_path="$(expand_local_path "$local_path")"
   if [[ "$local_path" == "~" ]]; then
     local_path="$HOME"
@@ -285,6 +306,84 @@ resolve_local_path() {
       printf "%s" "$(pwd -P)/$local_path"
     fi
   fi
+}
+
+prompt_transfer_direction() {
+  local direction
+  while true; do
+    if ! read -r -p "Direction (u=upload, d=download) [u]: " direction; then
+      return 1
+    fi
+    direction="$(trim_path "${direction:-u}")"
+    case "${direction,,}" in
+      u|up|upload)
+        printf "upload"
+        return 0
+        ;;
+      d|down|download)
+        printf "download"
+        return 0
+        ;;
+      *)
+        echo "Invalid direction: ${direction}. Enter u or d."
+        ;;
+    esac
+  done
+}
+
+prompt_local_source_path() {
+  local local_input local_resolved
+  while true; do
+    if ! read -r -e -p "Local source path: " local_input; then
+      return 1
+    fi
+    local_input="$(normalize_local_input_path "$local_input")"
+    if [[ -z "$local_input" ]]; then
+      echo "Local source path is required"
+      continue
+    fi
+    local_resolved="$(resolve_local_path "$local_input")"
+    if [[ ! -e "$local_resolved" ]]; then
+      echo "Local source path does not exist: $local_resolved"
+      continue
+    fi
+    printf "%s" "$local_resolved"
+    return 0
+  done
+}
+
+prompt_remote_path() {
+  local prompt_text="$1"
+  local default_value="${2:-}"
+  local remote_input
+  while true; do
+    if ! read -r -e -p "$prompt_text" remote_input; then
+      return 1
+    fi
+    remote_input="$(trim_path "$remote_input")"
+    remote_input="$(strip_matching_outer_quotes "$remote_input")"
+    if [[ -z "$remote_input" ]]; then
+      if [[ -n "$default_value" ]]; then
+        remote_input="$default_value"
+      else
+        echo "Remote path is required"
+        continue
+      fi
+    fi
+    printf "%s" "$(expand_remote_path "$remote_input")"
+    return 0
+  done
+}
+
+prompt_local_destination_path() {
+  local default_value="${1:-.}"
+  local local_input
+  if ! read -r -e -p "Local destination path [.]: " local_input; then
+    return 1
+  fi
+  local_input="$(trim_path "$local_input")"
+  local_input="${local_input:-$default_value}"
+  printf "%s" "$(resolve_local_path "$local_input")"
 }
 
 print_shell_escaped_cmd() {
@@ -489,57 +588,33 @@ run_action() {
       ;;
     ctrl-s)
       echo "SCP mode for $alias ($user@$host)"
-      read -r -p "Direction (u=upload, d=download) [u]: " direction
-      direction="${direction:-u}"
-      case "${direction,,}" in
-        u|up|upload)
-          read -r -e -p "Local source path: " local_path
-          read -r -e -p "Remote destination path (absolute or relative to ~): " remote_path
-          [[ -n "${local_path}" ]] || die "Local source path is required"
-          [[ -n "${remote_path}" ]] || die "Remote destination path is required"
-          local_path="$(resolve_local_path "$local_path")"
-          remote_path="$(expand_remote_path "$remote_path")"
+      direction="$(prompt_transfer_direction)" || { echo "Cancelled."; return 0; }
+      case "$direction" in
+        upload)
+          local_path="$(prompt_local_source_path)" || { echo "Cancelled."; return 0; }
+          remote_path="$(prompt_remote_path "Remote destination path (absolute or relative to ~) [~]: " "~")" || { echo "Cancelled."; return 0; }
           exec scp -r -- "$local_path" "${alias}:${remote_path}"
           ;;
-        d|down|download)
-          read -r -e -p "Remote source path (absolute or relative to ~): " remote_path
-          read -r -e -p "Local destination path [.]: " local_path
-          local_path="${local_path:-.}"
-          [[ -n "${remote_path}" ]] || die "Remote source path is required"
-          local_path="$(resolve_local_path "$local_path")"
-          remote_path="$(expand_remote_path "$remote_path")"
+        download)
+          remote_path="$(prompt_remote_path "Remote source path (absolute or relative to ~): ")" || { echo "Cancelled."; return 0; }
+          local_path="$(prompt_local_destination_path ".")" || { echo "Cancelled."; return 0; }
           exec scp -r -- "${alias}:${remote_path}" "$local_path"
-          ;;
-        *)
-          die "Invalid direction: $direction"
           ;;
       esac
       ;;
     ctrl-r)
       echo "RSYNC mode for $alias ($user@$host)"
-      read -r -p "Direction (u=upload, d=download) [u]: " direction
-      direction="${direction:-u}"
-      case "${direction,,}" in
-        u|up|upload)
-          read -r -e -p "Local source path: " local_path
-          read -r -e -p "Remote destination path (absolute or relative to ~): " remote_path
-          [[ -n "${local_path}" ]] || die "Local source path is required"
-          [[ -n "${remote_path}" ]] || die "Remote destination path is required"
-          local_path="$(resolve_local_path "$local_path")"
-          remote_path="$(expand_remote_path "$remote_path")"
+      direction="$(prompt_transfer_direction)" || { echo "Cancelled."; return 0; }
+      case "$direction" in
+        upload)
+          local_path="$(prompt_local_source_path)" || { echo "Cancelled."; return 0; }
+          remote_path="$(prompt_remote_path "Remote destination path (absolute or relative to ~) [~]: " "~")" || { echo "Cancelled."; return 0; }
           exec rsync -avz --progress -- "$local_path" "${alias}:${remote_path}"
           ;;
-        d|down|download)
-          read -r -e -p "Remote source path (absolute or relative to ~): " remote_path
-          read -r -e -p "Local destination path [.]: " local_path
-          local_path="${local_path:-.}"
-          [[ -n "${remote_path}" ]] || die "Remote source path is required"
-          local_path="$(resolve_local_path "$local_path")"
-          remote_path="$(expand_remote_path "$remote_path")"
+        download)
+          remote_path="$(prompt_remote_path "Remote source path (absolute or relative to ~): ")" || { echo "Cancelled."; return 0; }
+          local_path="$(prompt_local_destination_path ".")" || { echo "Cancelled."; return 0; }
           exec rsync -avz --progress -- "${alias}:${remote_path}" "$local_path"
-          ;;
-        *)
-          die "Invalid direction: $direction"
           ;;
       esac
       ;;
@@ -564,8 +639,11 @@ main() {
     [[ -n "$alias" ]] || die "Missing alias"
     [[ -n "$direction" ]] || die "Missing direction (upload/download)"
     [[ -n "$local_path" ]] || die "Missing local path"
-    [[ -n "$remote_path" ]] || die "Missing remote path"
     local_path="$(resolve_local_path "$local_path")"
+    if [[ -z "$remote_path" && "${direction,,}" =~ ^(u|up|upload)$ ]]; then
+      remote_path="~"
+    fi
+    [[ -n "$remote_path" ]] || die "Missing remote path"
     remote_path="$(expand_remote_path "$remote_path")"
     case "${direction,,}" in
       u|up|upload) print_shell_escaped_cmd scp -r -- "$local_path" "${alias}:${remote_path}" ;;
@@ -582,8 +660,11 @@ main() {
     [[ -n "$alias" ]] || die "Missing alias"
     [[ -n "$direction" ]] || die "Missing direction (upload/download)"
     [[ -n "$local_path" ]] || die "Missing local path"
-    [[ -n "$remote_path" ]] || die "Missing remote path"
     local_path="$(resolve_local_path "$local_path")"
+    if [[ -z "$remote_path" && "${direction,,}" =~ ^(u|up|upload)$ ]]; then
+      remote_path="~"
+    fi
+    [[ -n "$remote_path" ]] || die "Missing remote path"
     remote_path="$(expand_remote_path "$remote_path")"
     case "${direction,,}" in
       u|up|upload) print_shell_escaped_cmd rsync -avz --progress -- "$local_path" "${alias}:${remote_path}" ;;

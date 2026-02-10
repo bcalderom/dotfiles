@@ -89,9 +89,41 @@ if [[ "${scp_upload_rel}" != *"cenizas_back_pybackups:\~/docs/report.txt"* ]]; t
   exit 1
 fi
 
+scp_upload_default_remote="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups upload "./local file.txt" "")"
+if [[ "${scp_upload_default_remote}" != *"cenizas_back_pybackups:\~"* ]]; then
+  echo "Expected empty upload remote path to default to ~ (shell-escaped), got: ${scp_upload_default_remote}" >&2
+  exit 1
+fi
+
+scp_upload_escaped_space="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups upload "./local\ file.txt" "docs")"
+if [[ "${scp_upload_escaped_space}" != *"local\ file.txt"* ]]; then
+  echo "Expected escaped-space local path input to normalize correctly, got: ${scp_upload_escaped_space}" >&2
+  exit 1
+fi
+
+scp_upload_quoted_local="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups upload "'./local file.txt'" "docs")"
+if [[ "${scp_upload_quoted_local}" != *"local\ file.txt"* ]]; then
+  echo "Expected quoted local path input to normalize correctly, got: ${scp_upload_quoted_local}" >&2
+  exit 1
+fi
+if [[ "${scp_upload_quoted_local}" == *"\\'"* ]]; then
+  echo "Expected quoted local path input to strip literal quote chars, got: ${scp_upload_quoted_local}" >&2
+  exit 1
+fi
+
 scp_download_abs="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups download "./dest" "/var/log/syslog")"
 if [[ "${scp_download_abs}" != *"cenizas_back_pybackups:/var/log/syslog"* ]]; then
   echo "Expected absolute remote path to be preserved for download, got: ${scp_download_abs}" >&2
+  exit 1
+fi
+
+scp_upload_quoted_remote="$(bash "${SSF_SCRIPT}" --_scp_cmd cenizas_back_pybackups upload "./local file.txt" "'docs/report.txt'")"
+if [[ "${scp_upload_quoted_remote}" != *"cenizas_back_pybackups:\~/docs/report.txt"* ]]; then
+  echo "Expected quoted remote path input to normalize correctly, got: ${scp_upload_quoted_remote}" >&2
+  exit 1
+fi
+if [[ "${scp_upload_quoted_remote}" == *"\\'"* ]]; then
+  echo "Expected quoted remote path input to strip literal quote chars, got: ${scp_upload_quoted_remote}" >&2
   exit 1
 fi
 
