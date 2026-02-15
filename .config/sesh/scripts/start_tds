@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+"$HOME/.config/sesh/scripts/tmux_rename_unique" "tds" "oc"
+
+if command -v tds >/dev/null 2>&1; then
+  exec tds -l oc
+fi
+
+printf 'tds command not found in PATH. Starting shell instead.\n'
+exec "${SHELL:-/bin/bash}" -l

@@ -1,61 +1,66 @@
 [[session]]
-name = "terminal"
+name = "terminal-local"
 path = "~/"
-startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"terminal-$(date +%d-%H%M%S)\"; fi'; clear"
+startup_command = "/home/boris/.config/sesh/scripts/start_terminal"
 
 [[session]]
-name = "tds"
+name = "tds-oc"
 path = "~/"
-startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"tds-$(date +%d-%H%M%S)\"; fi; exec tds'; clear"
+startup_command = "/home/boris/.config/sesh/scripts/start_tds"
 
 [[session]]
-name = "ssh connect"
+name = "ssh-connect"
 path = "~/"
-startup_command = "clear; bash -lc 'if [ -n \"${TMUX:-}\" ]; then tmux rename-session \"ssh-$(date +%d-%H%M%S)\"; fi; exec ssf'; clear"
+startup_command = "/home/boris/.config/sesh/scripts/start_ssh"
 
 [[session]]
-name = "new note"
+name = "notes-new"
 path = "~/Obsidian/engineer/0 Inbox/"
-startup_command = "clear; onn; clear"
+startup_command = "onn"
 
 [[session]]
-name = "vault"
+name = "notes-vault"
 path = "~/Obsidian/engineer/"
-startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'; clear"
+startup_command = "/home/boris/.config/sesh/scripts/nvim_find_files"
 
 # open the file manager
 [[session]]
-name = "Downloads"
+name = "files-downloads"
 path = "~/Downloads"
-startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() local telescope = require(\"telescope\") pcall(telescope.load_extension, \"file_browser\") telescope.extensions.file_browser.file_browser({ path = vim.loop.cwd(), cwd = vim.loop.cwd(), hidden = true, respect_gitignore = false, grouped = true, initial_mode = \"insert\" }) end)'; clear"
+startup_command = "/home/boris/.config/sesh/scripts/nvim_file_browser"
 
 [[session]]
-name = "dotfiles"
+name = "cfg-dotfiles"
 path = "~/dotfiles/"
-startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'; clear"
+startup_command = "/home/boris/.config/sesh/scripts/nvim_find_files"
 
 [[session]]
-name = "zshrc config"
-path = "~/.zshrc"
+name = "cfg-zshrc"
+path = "~/"
 startup_command = "nvim ~/.zshrc"
 
 [[session]]
-name = "neovim config"
+name = "cfg-nvim"
 path = "~/.config/nvim/lua/"
-startup_command = "clear; nvim +'autocmd VimEnter * ++once lua vim.schedule(function() require(\"telescope.builtin\").find_files() end)'; clear"
+startup_command = "/home/boris/.config/sesh/scripts/nvim_find_files"
 
 [[session]]
-name = "tmux config"
+name = "cfg-tmux"
 path = "~/.config/tmux/"
 startup_command = "nvim tmux.conf"
 
 [[session]]
-name = "hyprland config"
+name = "cfg-hypr"
 path = "~/.config/hypr/"
 startup_command = "nvim hyprland.conf"
 
 [[session]]
-name = "sesh config"
+name = "cfg-ssh"
+path = "~/.ssh/"
+startup_command = "nvim config"
+
+[[session]]
+name = "cfg-sesh"
 path = "~/.config/sesh/"
 startup_command = "nvim sesh.toml"
 

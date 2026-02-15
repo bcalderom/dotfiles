@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+"$HOME/.config/sesh/scripts/tmux_rename_unique" "term" "local"
+exec "${SHELL:-/bin/bash}" -l
