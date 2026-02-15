@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+"$HOME/.config/sesh/scripts/tmux_rename_unique" "ssh" "connect"
+
+if command -v ssf >/dev/null 2>&1; then
+  exec ssf
+fi
+
+printf 'ssf command not found in PATH. Starting shell instead.\n'
+exec "${SHELL:-/bin/bash}" -l
