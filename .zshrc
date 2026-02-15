@@ -70,6 +70,13 @@ bindkey '^[w' kill-region
 # Alt+. (Esc-.): insert the last word from the previous command
 bindkey '^[.' insert-last-word
 
+# Edit current command in $EDITOR with Ctrl+X, e
+autoload -Uz edit-command-line
+zle -N edit-command-line
+bindkey '^Xe' edit-command-line
+bindkey -M viins '^Xe' edit-command-line
+bindkey -M vicmd '^Xe' edit-command-line
+
 # ~~~~~~~~~~~~~~~ History ~~~~~~~~~~~~~~~~~~~~~~~~
 
 HISTSIZE=100000
@@ -177,8 +184,8 @@ alias ef='nvim $(fzf --height 40% )'
 alias v='nvim'
 alias zrc="nvim ~/.zshrc"
 
-# ls
-alias la='ls -lahtr'
+# cd
+alias cd="z"
 
 # cd directories
 alias dot='cd ~/dotfiles'
@@ -187,11 +194,12 @@ alias hypr='nvim ~/dotfiles/.config/hypr/hyprland.conf'
 alias dev='cd ~/Desarrollos'
 
 # Changing "ls" to "eza"
-alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
+# alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
+alias ls='eza -alg --color=always --group-directories-first'
 alias la='eza -ag --color=always --group-directories-first' # all files and dirs
 alias ll='eza -lg --color=always --group-directories-first' # long format
 alias lt='eza -agT --color=always --group-directories-first' # tree listing
-alias l.='eza -ag | egrep "^\."'
+alias l.='eza -ag | grep -E "^\."'
 
 # Bluetooth
 
