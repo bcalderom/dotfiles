@@ -113,7 +113,6 @@ lambda_package/
 .config/pavucontrol.ini
 .config/pulse/
 .config/session/
-.config/wireplumber/wireplumber.conf.d/50-autoswitch.conf
 .config/kwalletrc
 .config/dolphinrc
 .config/kdeglobals
@@ -131,3 +130,4 @@ lambda_package/
 .config/uv/uv-receipt.json
 .config/menus/
 .config/btop/
+.config/teams-for-linux/
