@@ -33,6 +33,7 @@ window#waybar {
 #battery,
 #power-profiles-daemon,
 #pulseaudio,
+#network,
 #disk,
 #temperature,
 #cpu,
@@ -126,6 +127,7 @@ tooltip label {
 
 #power-profiles-daemon,
 #pulseaudio,
+#network,
 #disk,
 #temperature,
 #cpu,
@@ -144,6 +146,7 @@ tooltip label {
 /* Hover feedback */
 #power-profiles-daemon:hover,
 #pulseaudio:hover,
+#network:hover,
 #disk:hover,
 #temperature:hover,
 #cpu:hover,
@@ -203,4 +206,3 @@ tooltip label {
   border-color: rgba(255, 255, 255, 0.15);
   animation: blink 0.5s steps(12) infinite alternate;
 }
-

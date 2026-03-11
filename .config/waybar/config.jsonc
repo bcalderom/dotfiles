@@ -11,6 +11,7 @@
     "battery",
     "power-profiles-daemon",
     "pulseaudio",
+    "network",
     "disk",
     "temperature",
     "cpu",
@@ -27,6 +28,15 @@
       ]
     },
     "on-click": "pavucontrol"
+  },
+  "network": {
+    "interval": 5,
+    "format-wifi": "  {signalStrength}%",
+    "format-ethernet": "󰈀  {ifname}",
+    "format-disconnected": "󰖪",
+    "tooltip": true,
+    "tooltip-format": "{ifname}: {ipaddr}\n{essid}",
+    "on-click": "nm-connection-editor"
   },
   "battery": {
     "states": {
