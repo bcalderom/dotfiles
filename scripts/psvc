@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICES=("cups.service" "avahi-daemon.service")
+OPTIONAL_SANED=("saned.socket" "saned.service")
+
+usage() {
+  cat <<'EOF'
+Manage printing/scanning related services on Arch Linux.
+
+Usage:
+  scripts/psvc.sh [action] [--include-saned]
+  scripts/psvc.sh --start [--include-saned]
+  scripts/psvc.sh --stop [--include-saned]
+  scripts/psvc.sh --menu [--include-saned]
+
+Actions:
+  status | enable | disable | start | stop | restart
+
+Notes:
+  - If no action is provided, interactive menu is shown.
+  - --start/--stop are shortcuts that do not change boot enablement.
+EOF
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "Missing required command: $1" >&2
+    exit 1
+  }
+}
+
+service_exists() {
+  local svc="$1"
+  local out
+  out="$(systemctl show -p LoadState "$svc" 2>/dev/null || true)"
+  [[ "$out" != *"LoadState=not-found"* ]]
+}
+
+collect_services() {
+  local include_saned="$1"
+  local all=()
+  local existing=()
+  local svc
+
+  all=("${SERVICES[@]}")
+  if [[ "$include_saned" == "1" ]]; then
+    all+=("${OPTIONAL_SANED[@]}")
+  fi
+
+  for svc in "${all[@]}"; do
+    if service_exists "$svc"; then
+      existing+=("$svc")
+    else
+      echo "Skipping missing unit: $svc"
+    fi
+  done
+
+  printf '%s\n' "${existing[@]}"
+}
+
+service_active() {
+  local svc="$1"
+  systemctl is-active "$svc" 2>/dev/null || true
+}
+
+service_enabled() {
+  local svc="$1"
+  systemctl is-enabled "$svc" 2>/dev/null || true
+}
+
+print_overview() {
+  local -n svcs_ref=$1
+  local svc active enabled
+  echo
+  echo "Current service state:"
+  for svc in "${svcs_ref[@]}"; do
+    active="$(service_active "$svc")"
+    [[ -n "$active" ]] || active="unknown"
+    enabled="$(service_enabled "$svc")"
+    [[ -n "$enabled" ]] || enabled="unknown"
+    echo "- $svc: active=$active, enabled=$enabled"
+  done
+}
+
+show_status() {
+  local -n svcs_ref=$1
+  local svc
+  for svc in "${svcs_ref[@]}"; do
+    echo
+    echo "=== $svc ==="
+    systemctl status --no-pager "$svc" || true
+  done
+}
+
+run_systemctl() {
+  if [[ $EUID -eq 0 ]]; then
+    systemctl "$@"
+  else
+    sudo systemctl "$@"
+  fi
+}
+
+manage_action() {
+  local action="$1"
+  shift
+  local svcs=("$@")
+
+  if [[ ${#svcs[@]} -eq 0 ]]; then
+    echo "No existing service units to manage."
+    return 0
+  fi
+
+  case "$action" in
+    enable)
+      run_systemctl enable --now "${svcs[@]}"
+      ;;
+    disable)
+      run_systemctl disable --now "${svcs[@]}"
+      ;;
+    start|stop|restart)
+      run_systemctl "$action" "${svcs[@]}"
+      ;;
+    status)
+      show_status svcs
+      ;;
+    *)
+      echo "Unsupported action: $action" >&2
+      exit 2
+      ;;
+  esac
+}
+
+menu_options() {
+  local -n svcs_ref=$1
+  local all_active=1 any_active=0 all_enabled=1 any_enabled=0
+  local svc active enabled
+
+  for svc in "${svcs_ref[@]}"; do
+    active="$(service_active "$svc")"
+    enabled="$(service_enabled "$svc")"
+
+    [[ "$active" == "active" ]] || all_active=0
+    [[ "$active" == "active" ]] && any_active=1
+
+    [[ "$enabled" == "enabled" ]] || all_enabled=0
+    [[ "$enabled" == "enabled" ]] && any_enabled=1
+  done
+
+  echo "1 status Show detailed status"
+  local n=2
+  if [[ $all_active -eq 0 ]]; then
+    echo "$n start Start inactive services"
+    n=$((n + 1))
+  fi
+  if [[ $any_active -eq 1 ]]; then
+    echo "$n stop Stop active services"
+    n=$((n + 1))
+    echo "$n restart Restart active services"
+    n=$((n + 1))
+  fi
+  if [[ $all_enabled -eq 0 ]]; then
+    echo "$n enable Enable and start services"
+    n=$((n + 1))
+  fi
+  if [[ $any_enabled -eq 1 ]]; then
+    echo "$n disable Disable and stop services"
+    n=$((n + 1))
+  fi
+  echo "q quit Exit menu"
+}
+
+interactive_menu() {
+  local -a svcs=("$@")
+
+  while true; do
+    print_overview svcs
+    echo
+    echo "Possible actions:"
+
+    local -A key_to_action=()
+    local key action label
+    while read -r key action label_rest; do
+      label="$label_rest"
+      key_to_action["$key"]="$action"
+      echo "  $key) $label"
+    done < <(menu_options svcs)
+
+    read -r -p "Select an option: " choice
+    choice="${choice,,}"
+
+    if [[ -z "${key_to_action[$choice]+x}" ]]; then
+      echo "Invalid option, try again."
+      continue
+    fi
+
+    action="${key_to_action[$choice]}"
+    if [[ "$action" == "quit" ]]; then
+      echo "Exiting."
+      return
+    fi
+
+    manage_action "$action" "${svcs[@]}"
+  done
+}
+
+main() {
+  require_cmd systemctl
+
+  local include_saned=0
+  local action=""
+  local use_menu=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --include-saned)
+        include_saned=1
+        ;;
+      --start)
+        [[ -n "$action" || $use_menu -eq 1 ]] && {
+          echo "Use either positional action or --start/--stop/--menu, not both." >&2
+          exit 2
+        }
+        action="start"
+        ;;
+      --stop)
+        [[ -n "$action" || $use_menu -eq 1 ]] && {
+          echo "Use either positional action or --start/--stop/--menu, not both." >&2
+          exit 2
+        }
+        action="stop"
+        ;;
+      --menu)
+        [[ -n "$action" ]] && {
+          echo "Use either positional action or --start/--stop/--menu, not both." >&2
+          exit 2
+        }
+        use_menu=1
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      status|enable|disable|start|stop|restart)
+        [[ -n "$action" || $use_menu -eq 1 ]] && {
+          echo "Use either positional action or --start/--stop/--menu, not both." >&2
+          exit 2
+        }
+        action="$1"
+        ;;
+      *)
+        echo "Unknown option or action: $1" >&2
+        usage
+        exit 2
+        ;;
+    esac
+    shift
+  done
+
+  local -a services=()
+  while IFS= read -r svc; do
+    [[ -n "$svc" ]] && services+=("$svc")
+  done < <(collect_services "$include_saned")
+
+  if [[ ${#services[@]} -eq 0 ]]; then
+    echo "No existing service units to manage."
+    exit 0
+  fi
+
+  if [[ $use_menu -eq 1 || -z "$action" ]]; then
+    interactive_menu "${services[@]}"
+  else
+    manage_action "$action" "${services[@]}"
+  fi
+}
+
+main "$@"
