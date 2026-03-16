@@ -1,16 +1,22 @@
-profile mirror {
-     output HDMI-A-1 enable mode preferred
- }
-
-# Laptop only
-profile laptop {
-    output eDP-1 enable mode preferred position 0,0
-    exec ~/.config/kanshi/post-laptop.sh
-}
+output "AU Optronics 0x369F Unknown" alias $INTERNAL
+output "ViewSonic Corporation VX2768-2KPC W5H211040271" alias $DOCK
+output HDMI-A-1 alias $HDMI
 
 # Docked / external monitor
 profile docked {
-    output eDP-1 disable
-    output DP-1 enable mode preferred position 0,0
+    output $INTERNAL disable position -1920,0
+    output $DOCK enable mode 2560x1440@120.01Hz position 1920,0
     exec ~/.config/kanshi/post-docked.sh
+}
+
+profile mirror {
+    output $INTERNAL enable mode preferred position 0,0
+    output $HDMI enable mode preferred position 0,0
+    exec ~/.config/kanshi/post-laptop.sh
+}
+
+# Laptop only
+profile laptop {
+    output $INTERNAL enable mode preferred position 0,0
+    exec ~/.config/kanshi/post-laptop.sh
 }
