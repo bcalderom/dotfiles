@@ -3,7 +3,14 @@ output "ViewSonic Corporation VX2768-2KPC W5H211040271" alias $DOCK
 output HDMI-A-1 alias $HDMI
 
 # Docked / external monitor
-profile docked {
+profile docked_dp_hdmi {
+    output $INTERNAL disable position -1920,0
+    output $DOCK enable mode 2560x1440@120.01Hz position 1920,0
+    output $HDMI disable
+    exec ~/.config/kanshi/post-docked.sh
+}
+
+profile docked_dp_only {
     output $INTERNAL disable position -1920,0
     output $DOCK enable mode 2560x1440@120.01Hz position 1920,0
     exec ~/.config/kanshi/post-docked.sh
@@ -11,8 +18,8 @@ profile docked {
 
 profile mirror {
     output $INTERNAL enable mode preferred position 0,0
-    output $HDMI enable mode preferred position 0,0
-    exec ~/.config/kanshi/post-laptop.sh
+    output $HDMI enable mode 1920x1080@60Hz position 0,0
+    exec ~/.config/kanshi/post-mirror.sh
 }
 
 # Laptop only
