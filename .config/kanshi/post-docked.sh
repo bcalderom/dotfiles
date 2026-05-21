@@ -13,3 +13,5 @@ done
 
 hyprctl dispatch moveworkspacetomonitor 1 DP-1 >/dev/null 2>&1 || true
 hyprctl dispatch moveworkspacetomonitor 2 DP-1 >/dev/null 2>&1 || true
+
+~/.config/kanshi/audio-route.sh >/dev/null 2>&1 || true
