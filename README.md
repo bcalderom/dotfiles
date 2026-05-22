@@ -40,3 +40,7 @@ Useful flags:
 bash scripts/obs/setup-obs.sh --check-only
 bash scripts/obs/setup-obs.sh --dry-run
 ```
+
+## Display setup docs
+
+Laptop monitor, docked USB-C, HDMI mirror, workspace, lid, and audio behavior are documented in `docs/display-setup/`.
