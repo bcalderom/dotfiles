@@ -36,7 +36,7 @@ Responsibilities:
 - Force `eDP-1` and DPMS on in laptop mode to recover after unplugging from docked mode.
 - Apply mirror-specific Hyprland monitor keywords.
 - Re-run audio routing after the display profile changes.
-- Signal Waybar to reload after docked, docked-open, and laptop display transitions.
+- Restart Waybar through Hyprland after docked, docked-open, and laptop display transitions when Waybar is already running.
 
 ## Hyprland Session
 
@@ -55,8 +55,8 @@ Important lines:
 - `exec-once = ~/.config/hypr/scripts/lid.sh`
 - `exec-once = [workspace 1 silent] $browser`
 - `exec-once = [workspace 2 silent] $terminal`
-- `bindl = ,switch:on:Lid Switch,exec,~/.config/hypr/scripts/lid.sh closed`
-- `bindl = ,switch:off:Lid Switch,exec,~/.config/hypr/scripts/lid.sh open`
+- `bindl = ,switch:on:Lid Switch,exec,~/.config/hypr/scripts/lid.sh`
+- `bindl = ,switch:off:Lid Switch,exec,~/.config/hypr/scripts/lid.sh`
 
 ## Lid Handling
 
@@ -65,6 +65,7 @@ File: `~/.config/hypr/scripts/lid.sh`
 Responsibilities:
 
 - Run once at startup to handle sessions that start with the lid already closed.
+- Read the current lid state when called without arguments so switch events do not depend on Hyprland's `on`/`off` naming.
 - If lid closes and `DP-1` exists, switch kanshi to a docked profile, bind workspace `1` and `2` to `DP-1`, move workspace `1`, workspace `2`, and the active workspace to `DP-1`, then disable `eDP-1`.
 - If lid opens and `DP-1` is still present, switch kanshi to a docked-open profile, request `eDP-1` with preferred mode, force DPMS on, bind workspace `1` to `DP-1`, bind workspace `2` to `eDP-1`, then move them to those monitors.
 - If lid opens and `DP-1` is absent, switch kanshi to `laptop`, request `eDP-1` with preferred mode, force DPMS on, bind workspace `1` and `2` to `eDP-1`, and move workspace `1`, workspace `2`, and the active workspace to `eDP-1`.
@@ -82,7 +83,7 @@ Implementation details:
 
 Known cleanup:
 
-- `~/.config/systemd/user/hypr-lid.service` currently points to `lid-handler.sh`, which is not present. Prefer one lid mechanism and remove or fix stale units later.
+- `~/.config/systemd/user/hypr-lid.path` watches `/proc/acpi/button/lid/LID0/state` and runs the same `lid.sh` handler as a backup to Hyprland switch binds.
 
 ## Audio Routing
 

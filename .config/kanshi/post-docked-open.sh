@@ -3,8 +3,9 @@
 command -v hyprctl >/dev/null 2>&1 || exit 0
 
 reload_waybar() {
-  command -v pkill >/dev/null 2>&1 || return 0
-  pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
+  command -v pgrep >/dev/null 2>&1 || return 0
+  pgrep -x waybar >/dev/null 2>&1 || return 0
+  hyprctl dispatch exec "bash -lc 'pkill -x waybar >/dev/null 2>&1 || true; waybar'" >/dev/null 2>&1 || true
 }
 
 INTERNAL="eDP-1"

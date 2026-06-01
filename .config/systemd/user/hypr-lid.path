@@ -2,8 +2,7 @@
 Description=Watch lid events
 
 [Path]
-PathChanged=/run/systemd/seats/
+PathChanged=/proc/acpi/button/lid/LID0/state
 
 [Install]
 WantedBy=default.target
-

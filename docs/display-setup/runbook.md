@@ -110,8 +110,16 @@ hyprctl binds
 
 Expected binds:
 
-- `switch:on:Lid Switch` runs `~/.config/hypr/scripts/lid.sh closed`.
-- `switch:off:Lid Switch` runs `~/.config/hypr/scripts/lid.sh open`.
+- `switch:on:Lid Switch` runs `~/.config/hypr/scripts/lid.sh`.
+- `switch:off:Lid Switch` runs `~/.config/hypr/scripts/lid.sh`.
+- The script reads `/proc/acpi/button/lid/LID0/state` to decide between closed and open behavior.
+
+Check the backup systemd watcher:
+
+```bash
+systemctl --user status hypr-lid.path hypr-lid.service
+systemd-analyze --user verify ~/.config/systemd/user/hypr-lid.service ~/.config/systemd/user/hypr-lid.path
+```
 
 ## Re-run Audio Routing
 

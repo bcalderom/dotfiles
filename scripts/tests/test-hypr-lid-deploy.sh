@@ -64,6 +64,8 @@ assert_file_exists "${HOME}/.config/hypr/scripts/lid.sh"
 assert_mode "${HOME}/.config/systemd/user/hypr-lid.service" 644
 assert_mode "${HOME}/.config/systemd/user/hypr-lid.path" 644
 assert_mode "${HOME}/.config/hypr/scripts/lid.sh" 755
+grep -Fq -- "ExecStart=%h/.config/hypr/scripts/lid.sh" "${HOME}/.config/systemd/user/hypr-lid.service"
+grep -Fq -- "PathChanged=/proc/acpi/button/lid/LID0/state" "${HOME}/.config/systemd/user/hypr-lid.path"
 
 grep -q -- "--user daemon-reload" "${SYSTEMCTL_LOG}"
 grep -q -- "--user enable --now hypr-lid.path" "${SYSTEMCTL_LOG}"

@@ -3,11 +3,20 @@
 INTERNAL="eDP-1"
 EXTERNAL="DP-1"
 STATE="${1:-}"
+LID_STATE_PATH="${LID_STATE_PATH:-}"
 
 command -v hyprctl >/dev/null 2>&1 || exit 0
 
+lid_is_closed() {
+  if [ -n "$LID_STATE_PATH" ]; then
+    grep -q closed "$LID_STATE_PATH" 2>/dev/null
+  else
+    grep -q closed /proc/acpi/button/lid/*/state 2>/dev/null
+  fi
+}
+
 if [ -z "$STATE" ]; then
-  if grep -q closed /proc/acpi/button/lid/*/state 2>/dev/null; then
+  if lid_is_closed; then
     STATE="closed"
   else
     STATE="open"
@@ -51,8 +60,9 @@ bind_workspace() {
 }
 
 reload_waybar() {
-  command -v pkill >/dev/null 2>&1 || return 0
-  pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
+  command -v pgrep >/dev/null 2>&1 || return 0
+  pgrep -x waybar >/dev/null 2>&1 || return 0
+  hyprctl dispatch exec "bash -lc 'pkill -x waybar >/dev/null 2>&1 || true; waybar'" >/dev/null 2>&1 || true
 }
 
 case "$STATE" in

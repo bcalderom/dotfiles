@@ -53,10 +53,12 @@ Checks:
 
 ```bash
 hyprctl devices
+hyprctl binds
 hyprctl monitors
 hyprctl workspaces
 hyprctl workspacerules
 kanshictl status
+systemctl --user status hypr-lid.path hypr-lid.service
 grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
 ```
 
@@ -136,7 +138,7 @@ Expected corrected state:
 
 If an extra empty workspace appears on `eDP-1`, rerun `~/.config/hypr/scripts/lid.sh open`; the handler should make workspace `2` active on `eDP-1` and remove Hyprland's temporary empty workspace.
 
-If `hyprctl workspaces` and `hyprctl workspacerules` are correct but Waybar still shows stale workspace buttons, reload Waybar with `pkill -SIGUSR2 -x waybar`. The lid and kanshi transition hooks already send this signal after docked, docked-open, and laptop transitions.
+If `hyprctl workspaces` and `hyprctl workspacerules` are correct but Waybar still shows stale workspace buttons, restart Waybar with `SUPER+W`. The lid and kanshi transition hooks already ask Hyprland to restart Waybar after docked, docked-open, and laptop transitions when Waybar is running.
 
 ## HDMI Presentation Does Not Mirror
 
