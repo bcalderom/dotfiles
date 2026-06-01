@@ -16,6 +16,19 @@ profile docked_dp_only {
     exec ~/.config/kanshi/post-docked.sh
 }
 
+profile docked_open_dp_hdmi {
+    output $INTERNAL enable mode preferred position 0,0
+    output $DOCK enable mode 2560x1440@120.01Hz position 1920,0
+    output $HDMI disable
+    exec ~/.config/kanshi/post-docked-open.sh
+}
+
+profile docked_open_dp_only {
+    output $INTERNAL enable mode preferred position 0,0
+    output $DOCK enable mode 2560x1440@120.01Hz position 1920,0
+    exec ~/.config/kanshi/post-docked-open.sh
+}
+
 profile mirror {
     output $INTERNAL enable mode preferred position 0,0
     output $HDMI enable mode 1920x1080@60Hz position 0,0
