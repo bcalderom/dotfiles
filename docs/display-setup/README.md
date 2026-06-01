@@ -24,6 +24,10 @@ Hyprland calls desktops `workspaces`; this documentation uses `workspace` for co
 - Docked lid-closed mode must end with only `DP-1` enabled.
 - Docked lid-closed mode must end with workspaces `1` and `2` on `DP-1`.
 - `kanshictl status` must report `docked_dp_only` or `docked_dp_hdmi` while the lid is closed on the USB-C monitor.
+- Docked lid-open mode must switch to `docked_open_dp_only` or `docked_open_dp_hdmi` so `eDP-1` stays powered while `DP-1` remains connected.
+- Docked lid-open mode must place workspace `1` on `DP-1` and workspace `2` on `eDP-1`.
+- Laptop recovery after unplug must end with `eDP-1` enabled, DPMS on, and workspaces moved back to `eDP-1`.
+- `kanshictl status` must report `laptop` after the USB-C monitor is unplugged.
 - App startup placement must not be used to fix monitor or lid behavior.
 
 ## Files
@@ -56,3 +60,25 @@ kanshictl status
 ```
 
 Expected result: `eDP-1` is disabled, workspaces `1` and `2` are on `DP-1`, and kanshi reports a docked profile.
+
+The docked lid-open path is validated with:
+
+```bash
+~/.config/hypr/scripts/lid.sh open
+hyprctl monitors
+hyprctl workspaces
+kanshictl status
+```
+
+Expected result while `DP-1` is connected: `eDP-1` and `DP-1` are both enabled, `eDP-1` has DPMS on, workspace `1` is on `DP-1`, workspace `2` is on `eDP-1`, and kanshi reports a docked-open profile.
+
+The unplug/open recovery path is validated with:
+
+```bash
+~/.config/hypr/scripts/lid.sh open
+hyprctl monitors
+hyprctl workspaces
+kanshictl status
+```
+
+Expected result: `eDP-1` is enabled with DPMS on, workspaces are on `eDP-1`, and kanshi reports `laptop` when `DP-1` is absent.

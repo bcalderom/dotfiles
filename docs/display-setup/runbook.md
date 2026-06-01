@@ -75,7 +75,27 @@ Force open-lid correction:
 ~/.config/hypr/scripts/lid.sh open
 ```
 
-If `eDP-1` does not remain enabled after `lid.sh open`, check `kanshictl status`; an active docked profile can keep the internal panel disabled.
+Validate docked open-lid correction:
+
+```bash
+hyprctl monitors
+hyprctl workspaces
+kanshictl status
+```
+
+Expected result when `DP-1` is present: both `DP-1` and `eDP-1` are enabled, `eDP-1` has `dpmsStatus: 1`, workspace `1` is on `DP-1`, workspace `2` is on `eDP-1`, and kanshi reports `docked_open_dp_only` or `docked_open_dp_hdmi`.
+
+Validate open-lid/unplug correction:
+
+```bash
+hyprctl monitors
+hyprctl workspaces
+kanshictl status
+```
+
+Expected result when `DP-1` is absent: `eDP-1` is enabled with `dpmsStatus: 1`, workspace `1` and `2` are on `eDP-1`, and kanshi reports `laptop`.
+
+If `eDP-1` does not remain enabled after `lid.sh open`, check `kanshictl status`; it should not remain on `docked_dp_only` or `docked_dp_hdmi` after opening the lid.
 
 ## Check Lid Binds
 

@@ -32,18 +32,47 @@ Expected docked validation:
 - `hyprctl workspaces` shows workspace `1` and `2` on `DP-1`.
 - `kanshictl status` shows `docked_dp_only` or `docked_dp_hdmi`.
 
+## Docked Lid Open
+
+Use this while still connected to the USB-C external monitor but with the laptop lid open.
+
+| Item | Expected behavior |
+| --- | --- |
+| Trigger | USB-C external monitor connected and lid opened |
+| Kanshi profile | `docked_open_dp_only` or `docked_open_dp_hdmi` |
+| Internal display | `eDP-1` enabled at preferred mode with DPMS on |
+| External display | `DP-1` remains enabled at `2560x1440@120.01Hz` |
+| Workspaces | Workspace `1` on `DP-1`; workspace `2` on `eDP-1`; focus falls back to workspace `2` if Hyprland creates a temporary empty workspace |
+| Audio | Prefer external USB/Bluetooth sink; otherwise HDMI sink when `DP-1` is active |
+
+Verification:
+
+```bash
+hyprctl monitors
+hyprctl workspaces
+kanshictl status
+```
+
+Expected docked-open validation:
+
+- `hyprctl monitors` shows both `DP-1` and `eDP-1` enabled.
+- `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
+- `hyprctl workspaces` shows workspace `1` on `DP-1` and workspace `2` on `eDP-1`.
+- `kanshictl status` shows `docked_open_dp_only` or `docked_open_dp_hdmi`.
+
 ## Laptop Only
 
 Use this in mobile/cafe mode with no external monitor.
 
 | Item | Expected behavior |
 | --- | --- |
-| Trigger | No USB-C dock monitor and no HDMI output |
+| Trigger | No USB-C dock monitor and no HDMI output; also used after unplugging the docked monitor |
 | Kanshi profile | `laptop` |
 | Internal display | `eDP-1` enabled at preferred mode |
 | External display | Disabled/not present |
 | HDMI display | Disabled/not present |
-| Workspaces | Workspace `1` and `2` moved to `eDP-1` |
+| Workspaces | Workspace `1`, workspace `2`, and the active workspace moved to `eDP-1` |
+| Unplug recovery | Force `eDP-1` on, force DPMS on, switch kanshi to `laptop` when `DP-1` is absent |
 | Lid close | Normally suspends/locks according to system policy if no external monitor is available |
 | Audio | Prefer external USB/Bluetooth device; otherwise internal speaker/headphones |
 
@@ -59,6 +88,8 @@ pactl info
 Expected laptop validation:
 
 - `hyprctl monitors` shows `eDP-1` enabled.
+- `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
+- `hyprctl workspaces` shows workspace `1` and `2` on `eDP-1`.
 - `kanshictl status` shows `laptop`.
 
 ## HDMI Mirror Presentation

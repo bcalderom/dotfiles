@@ -72,6 +72,62 @@ Expected corrected state:
 - `hyprctl workspaces` shows workspace `1` and `2` on `DP-1`.
 - `kanshictl status` shows `docked_dp_only` or `docked_dp_hdmi`.
 
+## Laptop Screen Black After Unplug
+
+Likely causes:
+
+- The lid open event fired before `DP-1` disappeared, so the laptop profile was not selected yet.
+- Kanshi switched to `laptop`, but `eDP-1` DPMS stayed off.
+- Workspaces remained logically available, but focus did not move cleanly back to `eDP-1`.
+
+Checks:
+
+```bash
+hyprctl monitors
+hyprctl workspaces
+kanshictl status
+grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
+```
+
+Fix path:
+
+- Run `~/.config/hypr/scripts/lid.sh open` after unplugging from `DP-1`.
+- If that works, the issue is the unplug/open race and `post-laptop.sh` should be checked because it owns profile-triggered recovery.
+
+Expected corrected state:
+
+- `hyprctl monitors` shows enabled `eDP-1` with `dpmsStatus: 1`.
+- `hyprctl workspaces` shows workspace `1` and `2` on `eDP-1`.
+- `kanshictl status` shows `laptop`.
+
+## Laptop Screen Black While Still Docked
+
+Likely causes:
+
+- Kanshi stayed on `docked_dp_only` or `docked_dp_hdmi`, which intentionally disables `eDP-1`.
+- The lid-open event did not switch to a docked-open profile.
+
+Checks:
+
+```bash
+hyprctl monitors
+hyprctl workspaces
+kanshictl status
+grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
+```
+
+Fix path:
+
+- Run `~/.config/hypr/scripts/lid.sh open` while `DP-1` is connected.
+- Confirm `kanshictl status` changes to `docked_open_dp_only` or `docked_open_dp_hdmi`.
+
+Expected corrected state:
+
+- `hyprctl monitors` shows enabled `DP-1` and `eDP-1`.
+- `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
+- `hyprctl workspaces` shows workspace `1` on `DP-1` and workspace `2` on `eDP-1`.
+- `kanshictl status` shows `docked_open_dp_only` or `docked_open_dp_hdmi`.
+
 ## HDMI Presentation Does Not Mirror
 
 Likely causes:
