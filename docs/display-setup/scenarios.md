@@ -22,6 +22,7 @@ Verification:
 ```bash
 hyprctl monitors
 hyprctl workspaces
+hyprctl workspacerules
 kanshictl status
 systemctl --user status kanshi-audio-route.service
 ```
@@ -30,6 +31,7 @@ Expected docked validation:
 
 - `hyprctl monitors` shows `DP-1` only.
 - `hyprctl workspaces` shows workspace `1` and `2` on `DP-1`.
+- `hyprctl workspacerules` shows workspace `1` and `2` bound to `DP-1`.
 - `kanshictl status` shows `docked_dp_only` or `docked_dp_hdmi`.
 
 ## Docked Lid Open
@@ -50,6 +52,7 @@ Verification:
 ```bash
 hyprctl monitors
 hyprctl workspaces
+hyprctl workspacerules
 kanshictl status
 ```
 
@@ -58,6 +61,7 @@ Expected docked-open validation:
 - `hyprctl monitors` shows both `DP-1` and `eDP-1` enabled.
 - `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
 - `hyprctl workspaces` shows workspace `1` on `DP-1` and workspace `2` on `eDP-1`.
+- `hyprctl workspacerules` shows workspace `1` bound to `DP-1` and workspace `2` bound to `eDP-1`.
 - `kanshictl status` shows `docked_open_dp_only` or `docked_open_dp_hdmi`.
 
 ## Laptop Only
@@ -81,6 +85,7 @@ Verification:
 ```bash
 hyprctl monitors
 hyprctl workspaces
+hyprctl workspacerules
 kanshictl status
 pactl info
 ```
@@ -90,6 +95,7 @@ Expected laptop validation:
 - `hyprctl monitors` shows `eDP-1` enabled.
 - `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
 - `hyprctl workspaces` shows workspace `1` and `2` on `eDP-1`.
+- `hyprctl workspacerules` shows workspace `1` and `2` bound to `eDP-1`.
 - `kanshictl status` shows `laptop`.
 
 ## HDMI Mirror Presentation

@@ -46,6 +46,15 @@ active_workspace() {
   hyprctl activeworkspace 2>/dev/null | awk '/^workspace ID/ { print $3; exit }'
 }
 
+bind_workspace() {
+  hyprctl keyword workspace "$1,monitor:$2" >/dev/null 2>&1 || true
+}
+
+reload_waybar() {
+  command -v pkill >/dev/null 2>&1 || return 0
+  pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
+}
+
 case "$STATE" in
   closed|close)
     i=0
@@ -62,6 +71,9 @@ case "$STATE" in
 
       current_ws="$(active_workspace)"
 
+      bind_workspace 1 "$EXTERNAL"
+      bind_workspace 2 "$EXTERNAL"
+
       hyprctl dispatch moveworkspacetomonitor 1 "$EXTERNAL" >/dev/null 2>&1 || true
       hyprctl dispatch moveworkspacetomonitor 2 "$EXTERNAL" >/dev/null 2>&1 || true
 
@@ -71,6 +83,7 @@ case "$STATE" in
       fi
 
       hyprctl keyword monitor "$INTERNAL,disable" >/dev/null 2>&1 || true
+      reload_waybar
     fi
     ;;
   open)
@@ -96,18 +109,28 @@ case "$STATE" in
 
     if internal_available; then
       if external_available; then
+        bind_workspace 1 "$EXTERNAL"
+        bind_workspace 2 "$INTERNAL"
+
         hyprctl dispatch moveworkspacetomonitor 1 "$EXTERNAL" >/dev/null 2>&1 || true
         hyprctl dispatch moveworkspacetomonitor 2 "$INTERNAL" >/dev/null 2>&1 || true
 
         case "$current_ws" in
-          1|2)
-            hyprctl dispatch workspace "$current_ws" >/dev/null 2>&1 || true
+          1)
+            hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
+            hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
+            ;;
+          2)
+            hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
             ;;
           *)
             hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
             ;;
         esac
       else
+        bind_workspace 1 "$INTERNAL"
+        bind_workspace 2 "$INTERNAL"
+
         hyprctl dispatch moveworkspacetomonitor 1 "$INTERNAL" >/dev/null 2>&1 || true
         hyprctl dispatch moveworkspacetomonitor 2 "$INTERNAL" >/dev/null 2>&1 || true
 
@@ -116,6 +139,7 @@ case "$STATE" in
           hyprctl dispatch workspace "$current_ws" >/dev/null 2>&1 || true
         fi
       fi
+      reload_waybar
     fi
     ;;
 esac

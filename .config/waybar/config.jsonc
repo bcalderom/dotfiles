@@ -17,6 +17,11 @@
     "cpu",
     "memory"
   ],
+  "hyprland/workspaces": {
+    "all-outputs": false,
+    "sort-by": "number",
+    "move-to-monitor": false
+  },
   "pulseaudio": {
     "format": "{icon}  {volume}%",
     "format-muted": "",

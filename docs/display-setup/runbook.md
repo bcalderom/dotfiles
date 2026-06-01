@@ -7,6 +7,7 @@ Use this when checking or recovering the display setup.
 ```bash
 hyprctl monitors
 hyprctl workspaces
+hyprctl workspacerules
 hyprctl activeworkspace
 kanshictl status
 pactl info
@@ -64,10 +65,11 @@ Validate closed-lid correction:
 ```bash
 hyprctl monitors
 hyprctl workspaces
+hyprctl workspacerules
 kanshictl status
 ```
 
-Expected result: only `DP-1` is enabled, workspace `1` and `2` are on `DP-1`, and kanshi reports `docked_dp_only` or `docked_dp_hdmi`.
+Expected result: only `DP-1` is enabled, workspace `1` and `2` are on `DP-1`, workspace rules bind both workspaces to `DP-1`, and kanshi reports `docked_dp_only` or `docked_dp_hdmi`.
 
 Force open-lid correction:
 
@@ -80,20 +82,22 @@ Validate docked open-lid correction:
 ```bash
 hyprctl monitors
 hyprctl workspaces
+hyprctl workspacerules
 kanshictl status
 ```
 
-Expected result when `DP-1` is present: both `DP-1` and `eDP-1` are enabled, `eDP-1` has `dpmsStatus: 1`, workspace `1` is on `DP-1`, workspace `2` is on `eDP-1`, and kanshi reports `docked_open_dp_only` or `docked_open_dp_hdmi`.
+Expected result when `DP-1` is present: both `DP-1` and `eDP-1` are enabled, `eDP-1` has `dpmsStatus: 1`, workspace `1` is on `DP-1`, workspace `2` is on `eDP-1`, workspace rules match that split, and kanshi reports `docked_open_dp_only` or `docked_open_dp_hdmi`.
 
 Validate open-lid/unplug correction:
 
 ```bash
 hyprctl monitors
 hyprctl workspaces
+hyprctl workspacerules
 kanshictl status
 ```
 
-Expected result when `DP-1` is absent: `eDP-1` is enabled with `dpmsStatus: 1`, workspace `1` and `2` are on `eDP-1`, and kanshi reports `laptop`.
+Expected result when `DP-1` is absent: `eDP-1` is enabled with `dpmsStatus: 1`, workspace `1` and `2` are on `eDP-1`, workspace rules bind both workspaces to `eDP-1`, and kanshi reports `laptop`.
 
 If `eDP-1` does not remain enabled after `lid.sh open`, check `kanshictl status`; it should not remain on `docked_dp_only` or `docked_dp_hdmi` after opening the lid.
 

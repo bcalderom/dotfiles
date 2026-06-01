@@ -2,6 +2,11 @@
 
 command -v hyprctl >/dev/null 2>&1 || exit 0
 
+reload_waybar() {
+  command -v pkill >/dev/null 2>&1 || return 0
+  pkill -SIGUSR2 -x waybar >/dev/null 2>&1 || true
+}
+
 INTERNAL="eDP-1"
 
 current_ws="$(hyprctl activeworkspace 2>/dev/null | awk '/^workspace ID/ { print $3; exit }')"
@@ -18,6 +23,9 @@ while [ "$i" -lt 30 ]; do
   i=$((i + 1))
 done
 
+hyprctl keyword workspace "1,monitor:$INTERNAL" >/dev/null 2>&1 || true
+hyprctl keyword workspace "2,monitor:$INTERNAL" >/dev/null 2>&1 || true
+
 hyprctl dispatch moveworkspacetomonitor 1 "$INTERNAL" >/dev/null 2>&1 || true
 hyprctl dispatch moveworkspacetomonitor 2 "$INTERNAL" >/dev/null 2>&1 || true
 
@@ -27,3 +35,4 @@ if [ -n "$current_ws" ]; then
 fi
 
 ~/.config/kanshi/audio-route.sh >/dev/null 2>&1 || true
+reload_waybar

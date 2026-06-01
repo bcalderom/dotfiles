@@ -23,9 +23,11 @@ Hyprland calls desktops `workspaces`; this documentation uses `workspace` for co
 
 - Docked lid-closed mode must end with only `DP-1` enabled.
 - Docked lid-closed mode must end with workspaces `1` and `2` on `DP-1`.
+- Docked lid-closed mode must set Hyprland workspace rules for workspace `1` and `2` to `DP-1` so switching workspaces does not return one to `eDP-1`.
 - `kanshictl status` must report `docked_dp_only` or `docked_dp_hdmi` while the lid is closed on the USB-C monitor.
 - Docked lid-open mode must switch to `docked_open_dp_only` or `docked_open_dp_hdmi` so `eDP-1` stays powered while `DP-1` remains connected.
 - Docked lid-open mode must place workspace `1` on `DP-1` and workspace `2` on `eDP-1`.
+- Docked lid-open mode must set Hyprland workspace rules for workspace `1` to `DP-1` and workspace `2` to `eDP-1`.
 - Laptop recovery after unplug must end with `eDP-1` enabled, DPMS on, and workspaces moved back to `eDP-1`.
 - `kanshictl status` must report `laptop` after the USB-C monitor is unplugged.
 - App startup placement must not be used to fix monitor or lid behavior.
