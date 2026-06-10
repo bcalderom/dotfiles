@@ -58,7 +58,7 @@ hyprctl monitors
 hyprctl workspaces
 hyprctl workspacerules
 kanshictl status
-systemctl --user status hypr-lid.path hypr-lid.service
+systemctl --user status hypr-lid.service
 grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
 ```
 

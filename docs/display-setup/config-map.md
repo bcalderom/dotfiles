@@ -60,12 +60,17 @@ Important lines:
 
 ## Lid Handling
 
-File: `~/.config/hypr/scripts/lid.sh`
+Files:
+
+- `~/.config/hypr/scripts/lid.sh`
+- `~/.config/hypr/scripts/lid-watch.sh`
+- `~/.config/systemd/user/hypr-lid.service`
 
 Responsibilities:
 
 - Run once at startup to handle sessions that start with the lid already closed.
 - Read the current lid state when called without arguments so switch events do not depend on Hyprland's `on`/`off` naming.
+- Run a user service watcher that polls the lid state and calls `lid.sh` when the state changes.
 - If lid closes and `DP-1` exists, switch kanshi to a docked profile, bind workspace `1` and `2` to `DP-1`, move workspace `1`, workspace `2`, and the active workspace to `DP-1`, then disable `eDP-1`.
 - If lid opens and `DP-1` is still present, switch kanshi to a docked-open profile, request `eDP-1` with preferred mode, force DPMS on, bind workspace `1` to `DP-1`, bind workspace `2` to `eDP-1`, then move them to those monitors.
 - If lid opens and `DP-1` is absent, switch kanshi to `laptop`, request `eDP-1` with preferred mode, force DPMS on, bind workspace `1` and `2` to `eDP-1`, and move workspace `1`, workspace `2`, and the active workspace to `eDP-1`.
@@ -83,7 +88,7 @@ Implementation details:
 
 Known cleanup:
 
-- `~/.config/systemd/user/hypr-lid.path` watches `/proc/acpi/button/lid/LID0/state` and runs the same `lid.sh` handler as a backup to Hyprland switch binds.
+- `~/.config/systemd/user/hypr-lid.service` runs `lid-watch.sh` as a backup to Hyprland switch binds because path watching `/proc/acpi/button/lid/LID0/state` is not reliable after system updates.
 
 ## Audio Routing
 

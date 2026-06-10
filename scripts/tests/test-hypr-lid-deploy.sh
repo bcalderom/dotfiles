@@ -58,17 +58,22 @@ echo "==> install"
 bash "${DEPLOY_SCRIPT}" --install
 
 assert_file_exists "${HOME}/.config/systemd/user/hypr-lid.service"
-assert_file_exists "${HOME}/.config/systemd/user/hypr-lid.path"
 assert_file_exists "${HOME}/.config/hypr/scripts/lid.sh"
+assert_file_exists "${HOME}/.config/hypr/scripts/lid-watch.sh"
 
 assert_mode "${HOME}/.config/systemd/user/hypr-lid.service" 644
-assert_mode "${HOME}/.config/systemd/user/hypr-lid.path" 644
 assert_mode "${HOME}/.config/hypr/scripts/lid.sh" 755
-grep -Fq -- "ExecStart=%h/.config/hypr/scripts/lid.sh" "${HOME}/.config/systemd/user/hypr-lid.service"
-grep -Fq -- "PathChanged=/proc/acpi/button/lid/LID0/state" "${HOME}/.config/systemd/user/hypr-lid.path"
+assert_mode "${HOME}/.config/hypr/scripts/lid-watch.sh" 755
+grep -Fq -- "ExecStart=%h/.config/hypr/scripts/lid-watch.sh" "${HOME}/.config/systemd/user/hypr-lid.service"
+if [[ -e "${HOME}/.config/systemd/user/hypr-lid.path" ]]; then
+  echo "Expected stale hypr-lid.path to be removed" >&2
+  exit 1
+fi
 
+grep -q -- "--user disable --now hypr-lid.path" "${SYSTEMCTL_LOG}"
 grep -q -- "--user daemon-reload" "${SYSTEMCTL_LOG}"
-grep -q -- "--user enable --now hypr-lid.path" "${SYSTEMCTL_LOG}"
+grep -q -- "--user enable hypr-lid.service" "${SYSTEMCTL_LOG}"
+grep -q -- "--user restart hypr-lid.service" "${SYSTEMCTL_LOG}"
 
 : > "${SYSTEMCTL_LOG}"
 
@@ -76,7 +81,8 @@ echo "==> update"
 bash "${DEPLOY_SCRIPT}" --update
 
 grep -q -- "--user daemon-reload" "${SYSTEMCTL_LOG}"
-grep -q -- "--user restart hypr-lid.path" "${SYSTEMCTL_LOG}"
+grep -q -- "--user enable hypr-lid.service" "${SYSTEMCTL_LOG}"
+grep -q -- "--user restart hypr-lid.service" "${SYSTEMCTL_LOG}"
 
 : > "${SYSTEMCTL_LOG}"
 
@@ -84,8 +90,9 @@ echo "==> stow-like symlinks"
 HOME_STOW="${TMPDIR}/home-stow"
 mkdir -p "${HOME_STOW}/.config/systemd/user" "${HOME_STOW}/.config/hypr/scripts"
 ln -sf "${DOTFILES_DIR}/.config/systemd/user/hypr-lid.service" "${HOME_STOW}/.config/systemd/user/hypr-lid.service"
-ln -sf "${DOTFILES_DIR}/.config/systemd/user/hypr-lid.path" "${HOME_STOW}/.config/systemd/user/hypr-lid.path"
 ln -sf "${DOTFILES_DIR}/.config/hypr/scripts/lid.sh" "${HOME_STOW}/.config/hypr/scripts/lid.sh"
+ln -sf "${DOTFILES_DIR}/.config/hypr/scripts/lid-watch.sh" "${HOME_STOW}/.config/hypr/scripts/lid-watch.sh"
+touch "${HOME_STOW}/.config/systemd/user/hypr-lid.path"
 
 HOME="${HOME_STOW}" bash "${DEPLOY_SCRIPT}" --update
 
@@ -93,8 +100,16 @@ if [[ ! -L "${HOME_STOW}/.config/systemd/user/hypr-lid.service" ]]; then
   echo "Expected symlink to remain: hypr-lid.service" >&2
   exit 1
 fi
+if [[ ! -L "${HOME_STOW}/.config/hypr/scripts/lid-watch.sh" ]]; then
+  echo "Expected symlink to remain: lid-watch.sh" >&2
+  exit 1
+fi
+if [[ -e "${HOME_STOW}/.config/systemd/user/hypr-lid.path" ]]; then
+  echo "Expected stale hypr-lid.path to be removed" >&2
+  exit 1
+fi
 
 grep -q -- "--user daemon-reload" "${SYSTEMCTL_LOG}"
-grep -q -- "--user restart hypr-lid.path" "${SYSTEMCTL_LOG}"
+grep -q -- "--user restart hypr-lid.service" "${SYSTEMCTL_LOG}"
 
 echo "OK"

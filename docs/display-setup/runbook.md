@@ -117,8 +117,8 @@ Expected binds:
 Check the backup systemd watcher:
 
 ```bash
-systemctl --user status hypr-lid.path hypr-lid.service
-systemd-analyze --user verify ~/.config/systemd/user/hypr-lid.service ~/.config/systemd/user/hypr-lid.path
+systemctl --user status hypr-lid.service
+systemd-analyze --user verify ~/.config/systemd/user/hypr-lid.service
 ```
 
 ## Re-run Audio Routing
