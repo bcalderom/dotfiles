@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # tds (Tmux Developer Session)
-# Usage: tds [--root PATH] [--depth N]
-# - --root PATH   Search root directory (default: current directory)
-# - --depth N     Search depth for subdirectories (default: 1)
-# - -h, --help    Show usage
+# Usage: tds [--root PATH] [--depth N] [--layout NAME]
+# - --root PATH     Search root directory (default: current directory)
+# - --depth N       Search depth for subdirectories (default: 2)
+# - -l, --layout NAME  Layout to use (default: 3-panes-ide)
+# - -h, --help      Show usage
 
 set -euo pipefail
 
 ROOT="${PWD}"
 DEPTH="2"
+LAYOUT="3-panes-ide"
 LEFT_PERCENT="40"
 RIGHT_PERCENT="60"
 RIGHT_TOP_PERCENT="80"
@@ -17,13 +19,18 @@ DEBUG="false"
 
 usage() {
   cat <<EOF
-Usage: tds [--root PATH] [--depth N]
+Usage: tds [--root PATH] [--depth N] [--layout NAME]
 
 Options:
   --root PATH   Search root directory (default: current directory)
-  --depth N     Search depth for subdirectories (default: 1)
+  --depth N     Search depth for subdirectories (default: 2)
+  -l, --layout NAME   Layout to use (default: 3-panes-ide)
   --debug       Print tmux layout debug info
   -h, --help    Show this help
+
+Layouts:
+  3-panes-ide
+  oc
 EOF
 }
 
@@ -109,7 +116,7 @@ split_pane() {
   printf '%s' "${pane}"
 }
 
-require_apps tmux fzf nvim opencode
+require_apps tmux fzf opencode
 
 if [[ -z "${TMUX:-}" ]]; then
   echo "tmux is not running. Launching tmux..." >&2
@@ -140,6 +147,17 @@ while [[ $# -gt 0 ]]; do
     DEPTH="${2:-}"
     shift 2
     ;;
+  -l | --layout)
+    if [[ -z "${2:-}" ]]; then
+      die "--layout requires a value."
+    fi
+    LAYOUT="${2}"
+    shift 2
+    ;;
+  --layout=*)
+    LAYOUT="${1#*=}"
+    shift 1
+    ;;
   --debug)
     DEBUG="true"
     shift 1
@@ -166,18 +184,32 @@ if [[ ! "${DEPTH}" =~ ^[0-9]+$ ]]; then
   die "--depth must be a non-negative integer."
 fi
 
-validate_percent "${LEFT_PERCENT}" "LEFT_PERCENT"
-validate_percent "${RIGHT_PERCENT}" "RIGHT_PERCENT"
-validate_percent "${RIGHT_TOP_PERCENT}" "RIGHT_TOP_PERCENT"
-validate_percent "${RIGHT_BOTTOM_PERCENT}" "RIGHT_BOTTOM_PERCENT"
-
-if ((LEFT_PERCENT + RIGHT_PERCENT != 100)); then
-  die "LEFT_PERCENT and RIGHT_PERCENT must sum to 100."
+if [[ -z "${LAYOUT}" ]]; then
+  die "--layout cannot be empty."
 fi
 
-if ((RIGHT_TOP_PERCENT + RIGHT_BOTTOM_PERCENT != 100)); then
-  die "RIGHT_TOP_PERCENT and RIGHT_BOTTOM_PERCENT must sum to 100."
-fi
+case "${LAYOUT}" in
+3-panes-ide)
+  require_apps nvim
+  validate_percent "${LEFT_PERCENT}" "LEFT_PERCENT"
+  validate_percent "${RIGHT_PERCENT}" "RIGHT_PERCENT"
+  validate_percent "${RIGHT_TOP_PERCENT}" "RIGHT_TOP_PERCENT"
+  validate_percent "${RIGHT_BOTTOM_PERCENT}" "RIGHT_BOTTOM_PERCENT"
+
+  if ((LEFT_PERCENT + RIGHT_PERCENT != 100)); then
+    die "LEFT_PERCENT and RIGHT_PERCENT must sum to 100."
+  fi
+
+  if ((RIGHT_TOP_PERCENT + RIGHT_BOTTOM_PERCENT != 100)); then
+    die "RIGHT_TOP_PERCENT and RIGHT_BOTTOM_PERCENT must sum to 100."
+  fi
+  ;;
+oc)
+  ;;
+*)
+  die "Unknown layout: ${LAYOUT}. Valid layouts: 3-panes-ide, oc"
+  ;;
+esac
 
 list_dirs() {
   printf '%s\n' "${ROOT}"
@@ -202,25 +234,52 @@ if [[ "${DEBUG}" == "true" ]]; then
   debug_log "Current pane size $(pane_size "${CURRENT_PANE_ID}")"
 fi
 
-target_window="${SESSION_NAME}:${WINDOW_ID}"
-left_pane="${CURRENT_PANE_ID}"
+layout_3_panes_ide() {
+  local left_pane="${CURRENT_PANE_ID}"
+  local right_pane
+  local bottom_right_pane
+  local top_right_pane
+  local dir_escaped
 
-if [[ "${WINDOW_PANES}" -gt 1 ]]; then
-  tmux kill-pane -a -t "${left_pane}"
-fi
+  if [[ "${WINDOW_PANES}" -gt 1 ]]; then
+    tmux kill-pane -a -t "${left_pane}"
+  fi
 
-right_pane="$(split_pane "${left_pane}" -h "${RIGHT_PERCENT}")"
-bottom_right_pane="$(split_pane "${right_pane}" -v "${RIGHT_BOTTOM_PERCENT}")"
-top_right_pane="${right_pane}"
+  right_pane="$(split_pane "${left_pane}" -h "${RIGHT_PERCENT}")"
+  bottom_right_pane="$(split_pane "${right_pane}" -v "${RIGHT_BOTTOM_PERCENT}")"
+  top_right_pane="${right_pane}"
+  dir_escaped="$(escape_shell "${DIR}")"
 
-dir_escaped="$(escape_shell "${DIR}")"
+  tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
+  tmux send-keys -t "${left_pane}" "opencode" C-m
 
-tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-tmux send-keys -t "${left_pane}" "opencode" C-m
+  tmux send-keys -t "${top_right_pane}" "cd -- ${dir_escaped}" C-m
+  tmux send-keys -t "${top_right_pane}" "nvim -c \"Telescope find_files\"" C-m
 
-tmux send-keys -t "${top_right_pane}" "cd -- ${dir_escaped}" C-m
-tmux send-keys -t "${top_right_pane}" "nvim ." C-m
+  tmux send-keys -t "${bottom_right_pane}" "cd -- ${dir_escaped}" C-m
 
-tmux send-keys -t "${bottom_right_pane}" "cd -- ${dir_escaped}" C-m
+  tmux select-pane -t "${left_pane}"
+}
 
-tmux select-pane -t "${left_pane}"
+layout_oc() {
+  local left_pane="${CURRENT_PANE_ID}"
+  local dir_escaped
+
+  if [[ "${WINDOW_PANES}" -gt 1 ]]; then
+    tmux kill-pane -a -t "${left_pane}"
+  fi
+
+  dir_escaped="$(escape_shell "${DIR}")"
+  tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
+  tmux send-keys -t "${left_pane}" "opencode" C-m
+  tmux select-pane -t "${left_pane}"
+}
+
+case "${LAYOUT}" in
+3-panes-ide)
+  layout_3_panes_ide
+  ;;
+oc)
+  layout_oc
+  ;;
+esac
