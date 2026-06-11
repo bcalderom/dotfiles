@@ -2,9 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-DOTFILES_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-DEPLOY_SCRIPT="${SCRIPTS_DIR}/kanata-deploy.sh"
+SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
+DOTFILES_DIR="$(cd -- "${SCRIPT_DIR}/../../../.." && pwd)"
+DEPLOY_SCRIPT="${SCRIPTS_DIR}/bin/kanata-deploy.sh"
 
 if [[ ! -f "${DEPLOY_SCRIPT}" ]]; then
   echo "Missing: ${DEPLOY_SCRIPT}" >&2

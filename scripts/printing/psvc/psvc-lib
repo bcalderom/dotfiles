@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+psvc_have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+psvc_die() {
+  local msg="$1" code="${2:-1}"
+  echo "$msg" >&2
+  exit "$code"
+}
+
+psvc_require_cmd() {
+  psvc_have_cmd "$1" || psvc_die "Missing required command: $1"
+}
+
+psvc_capture() {
+  local out rc
+  set +e
+  out="$({ "$@"; } 2>&1)"
+  rc=$?
+  set -e
+  printf '%s' "$out"
+  return "$rc"
+}
+
+psvc_default_queue() {
+  local out
+  out="$(psvc_capture lpstat -d || true)"
+  [[ "$out" == *": "* ]] || return 1
+  printf '%s\n' "${out##*: }"
+}
+
+psvc_queue_exists() {
+  lpstat -p "$1" >/dev/null 2>&1
+}
+
+psvc_queue_uri() {
+  local out
+  out="$(psvc_capture lpstat -v "$1" || true)"
+  [[ "$out" == *": "* ]] || return 1
+  printf '%s\n' "${out#*: }"
+}
+
+psvc_extract_host() {
+  local uri="$1" rest host
+  [[ "$uri" == *"://"* ]] || return 1
+  rest="${uri#*://}"
+  host="${rest%%/*}"
+  if [[ "$host" == \[*\]* ]]; then
+    host="${host#\[}"
+    host="${host%%\]*}"
+  else
+    host="${host%%:*}"
+  fi
+  [[ -n "$host" ]] || return 1
+  printf '%s\n' "$host"
+}
+
+psvc_is_ipv4() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; }

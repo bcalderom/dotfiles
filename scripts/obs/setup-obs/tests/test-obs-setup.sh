@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-OBS_SCRIPT="${SCRIPT_DIR}/../obs/setup-obs.sh"
+OBS_SCRIPT="${SCRIPT_DIR}/../setup-obs.sh"
 
 if [[ ! -f "${OBS_SCRIPT}" ]]; then
   echo "Missing: ${OBS_SCRIPT}" >&2

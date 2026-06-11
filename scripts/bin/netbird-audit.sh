@@ -1,0 +1,1 @@
+../network/netbird-audit/netbird-audit.sh

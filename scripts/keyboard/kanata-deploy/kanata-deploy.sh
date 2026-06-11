@@ -26,8 +26,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+DOTFILES_DIR="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
 
 SVC_SRC="${DOTFILES_DIR}/.config/systemd/kanata.service"
 CFG_SRC="${DOTFILES_DIR}/.config/kanata/kanata.kbd"

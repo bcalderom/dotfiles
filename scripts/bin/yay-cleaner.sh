@@ -1,0 +1,1 @@
+../packages/yay-cleaner/yay-cleaner.sh

@@ -1,0 +1,1 @@
+../desktop/hypr-lid-deploy/hypr-lid-deploy.sh
