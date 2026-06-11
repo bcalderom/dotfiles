@@ -133,3 +133,7 @@ lambda_package/
 .config/teams-for-linux/
 .config/onlyoffice/
 .config/baloofileinformationrc
+.config/obs-studio/
+.config/zoom*
+.config/systemd/user/
+.config/opencode/package-lock.json
