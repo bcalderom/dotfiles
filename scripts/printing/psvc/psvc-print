@@ -15,6 +15,16 @@ LAYOUT="lrtb"
 SIDES="one-sided"
 DUPLEX="None"
 FIT_TO_PAGE=0
+PRINTABLE_DOCUMENT_PATTERNS=(
+  "*.pdf" "*.ps" "*.txt" "*.text" "*.md" "*.markdown" "*.csv"
+)
+DIRECT_PRINT_PATTERNS=(
+  "${PRINTABLE_DOCUMENT_PATTERNS[@]}" "*.png" "*.jpg" "*.jpeg"
+)
+CONVERSION_REQUIRED_PATTERNS=(
+  "*.rtf" "*.odt" "*.ods" "*.odp"
+  "*.doc" "*.docx" "*.xls" "*.xlsx" "*.ppt" "*.pptx"
+)
 
 usage() {
   cat <<'EOF'
@@ -54,6 +64,49 @@ prompt_default() {
   local prompt="$1" default="$2" value
   read -r -p "$prompt [$default]: " value
   printf '%s\n' "${value:-$default}"
+}
+
+matches_any_pattern() {
+  local file="${1,,}" pattern
+  shift
+  for pattern in "$@"; do
+    pattern="${pattern,,}"
+    [[ "$file" == $pattern ]] && return 0
+  done
+  return 1
+}
+
+is_direct_print_file() {
+  matches_any_pattern "$1" "${DIRECT_PRINT_PATTERNS[@]}"
+}
+
+requires_conversion() {
+  matches_any_pattern "$1" "${CONVERSION_REQUIRED_PATTERNS[@]}"
+}
+
+find_printable_documents() {
+  local root="$1" pattern
+  local find_args=()
+  for pattern in "${PRINTABLE_DOCUMENT_PATTERNS[@]}"; do
+    [[ ${#find_args[@]} -gt 0 ]] && find_args+=(-o)
+    find_args+=(-iname "$pattern")
+  done
+
+  find "$root" -path "$root/.*" -prune -o -type f \( "${find_args[@]}" \) -print 2>/dev/null
+}
+
+select_print_file() {
+  local root="${HOME:-}" selected rc
+  [[ -n "$root" && -d "$root" ]] || psvc_die "HOME is not set or is not a directory" 2
+  psvc_require_cmd find
+  psvc_require_cmd fzf
+
+  set +e
+  selected="$(find_printable_documents "$root" | sort | fzf --prompt="Document to print: ")"
+  rc=$?
+  set -e
+  [[ $rc -eq 0 && -n "$selected" ]] || return 1
+  FILE="$selected"
 }
 
 choose_sides() {
@@ -104,7 +157,7 @@ parse_args() {
 }
 
 interactive_setup() {
-  [[ -n "$FILE" ]] || FILE="$(prompt_default "File to print" "")"
+  [[ -n "$FILE" ]] || select_print_file || psvc_die "No file selected" 2
   [[ -n "$QUEUE" ]] || QUEUE="$(prompt_default "Printer queue" "${QUEUE:-brother_t720dw}")"
   if [[ -z "$PRESET" ]]; then
     echo "Preset:"
@@ -126,10 +179,8 @@ interactive_setup() {
 
 validate_file() {
   [[ -f "$FILE" ]] || psvc_die "File not found: $FILE" 2
-  case "${FILE,,}" in
-    *.pdf|*.ps|*.txt|*.png|*.jpg|*.jpeg) ;;
-    *) echo "Warning: CUPS may not print this format directly; PDF is safest." >&2 ;;
-  esac
+  requires_conversion "$FILE" && psvc_die "Cannot print this format directly: $FILE. Export or convert it to PDF first." 2
+  is_direct_print_file "$FILE" || echo "Warning: CUPS may not print this format directly; PDF is safest." >&2
 }
 
 build_command() {

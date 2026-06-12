@@ -62,13 +62,18 @@ psvc doctor --queue brother_t720dw --strict-network
 The doctor checks:
 
 - CUPS and Avahi service/socket state
-- CUPS queue status
-- pending/incomplete jobs
+- CUPS queue enabled/disabled status
+- whether the queue is accepting requests
+- pending/incomplete jobs and recent completed job records
 - configured printer URI
 - IPP port reachability
 - ping response
 - IPP/Avahi discovery
 - recent CUPS/Avahi warnings
+
+Queue issues that prevent new jobs, such as a disabled queue or a queue that is not accepting requests, are reported as failures. Suspicious job history, such as device-side cancellations or CUPS messages like `Unable to add document to print job`, is reported as a warning because it may describe a recent failed document rather than a broken printer connection.
+
+The summary includes an overall classification: `PASS` when no issues are found, `WARN` when only warnings are present, and `FAIL` when at least one hard failure is detected.
 
 ## Print
 
@@ -89,6 +94,11 @@ Interactive mode:
 ```bash
 psvc print
 ```
+
+Interactive mode opens `fzf` to select a document from the current user's `$HOME`.
+It shows direct-printable document formats (`pdf`, `ps`, `txt`, Markdown, and CSV) and skips top-level hidden directories such as `~/.cache` and `~/.config` to keep the picker focused.
+
+Office/OpenDocument files (`docx`, `xlsx`, `pptx`, `odt`, and similar formats) must be exported or converted to PDF before printing. `psvc print` fails early for those formats instead of sending a job that CUPS may mark successful even though the printer cannot render it.
 
 ## Print Presets
 
@@ -144,6 +154,12 @@ ping
 ippfind
 avahi-browse
 journalctl
+```
+
+Interactive file selection for `psvc print` also requires:
+
+```text
+fzf
 ```
 
 Missing optional diagnostic tools are reported as warnings.

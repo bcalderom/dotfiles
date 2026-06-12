@@ -56,3 +56,22 @@ psvc_extract_host() {
 }
 
 psvc_is_ipv4() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+
+psvc_queue_problem_text() {
+  local text="${1,,}"
+  case "$text" in
+    *canceled-at-device*|*canceled\ at\ printer*|*unable\ to\ add\ document*|*unreachable*|*unavailable*|*backend\ failed*|*filter\ failed*|*job-aborted*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+psvc_limit_job_records() {
+  local max="$1" count=0 line
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[^[:space:]] ]]; then
+      count=$((count + 1))
+      [[ $count -gt $max ]] && break
+    fi
+    printf '%s\n' "$line"
+  done
+}

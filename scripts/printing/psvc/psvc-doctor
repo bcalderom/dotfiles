@@ -43,6 +43,20 @@ report_network_issue() {
   fi
 }
 
+report_queue_jobs() {
+  local jobs="$1" none_msg="$2" ok_status="$3" ok_msg="$4" problem_msg="$5"
+  if [[ -z "$jobs" ]]; then
+    report PASS "$none_msg"
+    return 0
+  fi
+  if psvc_queue_problem_text "$jobs"; then
+    report WARN "$problem_msg"
+  else
+    report "$ok_status" "$ok_msg"
+  fi
+  printf '%s\n' "$jobs"
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -104,7 +118,7 @@ check_units() {
 }
 
 check_queue() {
-  local out jobs
+  local accepting completed out jobs
   section "Queue"
   psvc_have_cmd lpstat || return 0
   [[ -n "$QUEUE" ]] || QUEUE="$(psvc_default_queue || true)"
@@ -116,11 +130,22 @@ check_queue() {
 
   out="$(psvc_capture lpstat -p "$QUEUE" || true)"
   if [[ "$out" == *" is idle"* || "$out" == *" now printing"* ]]; then
-    report PASS "CUPS queue '$QUEUE' exists and is ready"
+    report PASS "CUPS queue '$QUEUE' exists and is enabled"
+  elif [[ "$out" == *" disabled"* ]]; then
+    report FAIL "CUPS queue '$QUEUE' is disabled: $out"
   elif [[ -n "$out" ]]; then
     report WARN "CUPS queue '$QUEUE' status: $out"
   else
     report FAIL "CUPS queue '$QUEUE' was not found"
+  fi
+
+  accepting="$(psvc_capture lpstat -a "$QUEUE" || true)"
+  if [[ "$accepting" == *" not accepting requests"* ]]; then
+    report FAIL "CUPS queue '$QUEUE' is not accepting requests: $accepting"
+  elif [[ "$accepting" == *" accepting requests"* ]]; then
+    report PASS "CUPS queue '$QUEUE' is accepting requests"
+  elif [[ -n "$accepting" ]]; then
+    report WARN "Could not classify CUPS queue accepting state: $accepting"
   fi
 
   DEVICE_URI="$(psvc_queue_uri "$QUEUE" || true)"
@@ -132,13 +157,12 @@ check_queue() {
     report FAIL "Could not read device URI for queue '$QUEUE'"
   fi
 
-  jobs="$(psvc_capture lpstat -W not-completed -o "$QUEUE" || true)"
-  if [[ -z "$jobs" ]]; then
-    report PASS "No incomplete jobs in '$QUEUE'"
-  else
-    report WARN "Incomplete jobs exist in '$QUEUE':"
-    printf '%s\n' "$jobs"
-  fi
+  jobs="$(psvc_capture lpstat -W not-completed -l -o "$QUEUE" || true)"
+  report_queue_jobs "$jobs" "No incomplete jobs in '$QUEUE'" WARN "Incomplete jobs exist in '$QUEUE'" "Incomplete jobs in '$QUEUE' include device/CUPS problem status"
+
+  completed="$(psvc_capture lpstat -W completed -l -o "$QUEUE" || true)"
+  completed="$(printf '%s\n' "$completed" | psvc_limit_job_records 5)"
+  report_queue_jobs "$completed" "No completed job history for '$QUEUE'" PASS "Recent completed jobs in '$QUEUE' have no reported queue errors" "Recent completed jobs in '$QUEUE' include device/CUPS problem status"
   psvc_have_cmd lpq && printf '%s\n' "$(psvc_capture lpq -P "$QUEUE" || true)"
 }
 
@@ -265,6 +289,7 @@ main() {
   check_logs
   section "Summary"
   printf 'Failures: %s, warnings: %s\n' "$FAIL_COUNT" "$WARN_COUNT"
+  if [[ $FAIL_COUNT -gt 0 ]]; then printf 'Overall: FAIL\n'; elif [[ $WARN_COUNT -gt 0 ]]; then printf 'Overall: WARN\n'; else printf 'Overall: PASS\n'; fi
   [[ $FAIL_COUNT -eq 0 ]]
 }
 
