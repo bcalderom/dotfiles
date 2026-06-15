@@ -90,6 +90,7 @@ Known cleanup:
 
 - `~/.config/systemd/user/hypr-lid.service` runs `lid-watch.sh` as a backup to Hyprland switch binds because path watching `/proc/acpi/button/lid/LID0/state` is not reliable after system updates.
 - `lid-watch.sh` also watches monitor topology so USB-C connect/disconnect events reconcile workspace rules even when the lid state does not change.
+- `lid-watch.sh` reconciles stable invalid states too, such as a closed lid with `eDP-1` still active or workspace rules pointing at the wrong output.
 
 ## Audio Routing
 
