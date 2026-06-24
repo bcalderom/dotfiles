@@ -1,0 +1,8 @@
+{
+	"spellCheckerLanguages": [
+		"es-419"
+	],
+	"followSystemTheme": false,
+	"disableGpu": true,
+	"closeAppOnCross": true
+}

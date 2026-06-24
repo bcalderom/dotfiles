@@ -130,7 +130,10 @@ lambda_package/
 .config/uv/uv-receipt.json
 .config/menus/
 .config/btop/
-.config/teams-for-linux/
+.config/teams-for-linux/*
+!.config/teams-for-linux/config.json
+.config/QtProject.conf
+.config/calibre/
 .config/onlyoffice/
 .config/baloofileinformationrc
 .config/obs-studio/
