@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-TDS_SCRIPT="${SCRIPTS_DIR}/tds"
+SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
+TDS_SCRIPT="${SCRIPTS_DIR}/bin/tds"
 
 if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux is required for this test" >&2

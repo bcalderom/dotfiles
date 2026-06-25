@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/psvc-lib"
+
+SERVICES=("cups.service" "avahi-daemon.service")
+OPTIONAL_SANED=("saned.socket" "saned.service")
+
+usage() {
+  cat <<'EOF'
+Manage printing/scanning services and print jobs.
+
+Usage:
+  psvc status|start|stop|restart|enable|disable [--include-saned]
+  psvc doctor [--queue name] [--strict-network]
+  psvc print [options] [file]
+  psvc --menu [--include-saned]
+
+Examples:
+  psvc status
+  psvc start
+  psvc doctor --queue brother_t720dw
+  psvc print --preset 2up-short-edge document.pdf
+EOF
+}
+
+service_exists() {
+  local out
+  out="$(systemctl show -p LoadState "$1" 2>/dev/null || true)"
+  [[ "$out" != *"LoadState=not-found"* ]]
+}
+
+collect_services() {
+  local include_saned="$1" svc
+  local all=("${SERVICES[@]}") existing=()
+  [[ "$include_saned" == "1" ]] && all+=("${OPTIONAL_SANED[@]}")
+  for svc in "${all[@]}"; do
+    if service_exists "$svc"; then
+      existing+=("$svc")
+    else
+      echo "Skipping missing unit: $svc" >&2
+    fi
+  done
+  printf '%s\n' "${existing[@]}"
+}
+
+run_systemctl() {
+  if [[ $EUID -eq 0 ]]; then
+    systemctl "$@"
+  else
+    sudo systemctl "$@"
+  fi
+}
+
+show_status() {
+  local svc
+  for svc in "$@"; do
+    echo
+    echo "=== $svc ==="
+    systemctl status --no-pager "$svc" || true
+  done
+}
+
+manage_action() {
+  local action="$1"
+  shift
+  [[ $# -gt 0 ]] || psvc_die "No existing service units to manage."
+  case "$action" in
+    enable) run_systemctl enable --now "$@" ;;
+    disable) run_systemctl disable --now "$@" ;;
+    start|stop|restart) run_systemctl "$action" "$@" ;;
+    status) show_status "$@" ;;
+    *) psvc_die "Unsupported action: $action" 2 ;;
+  esac
+}
+
+print_overview() {
+  local svc active enabled
+  echo
+  echo "Current service state:"
+  for svc in "$@"; do
+    active="$(systemctl is-active "$svc" 2>/dev/null || true)"
+    enabled="$(systemctl is-enabled "$svc" 2>/dev/null || true)"
+    echo "- $svc: active=${active:-unknown}, enabled=${enabled:-unknown}"
+  done
+}
+
+interactive_menu() {
+  local svcs=("$@") choice
+  while true; do
+    print_overview "${svcs[@]}"
+    echo
+    echo "1) status"
+    echo "2) start"
+    echo "3) stop"
+    echo "4) restart"
+    echo "q) quit"
+    read -r -p "Select an option: " choice
+    case "${choice,,}" in
+      1) manage_action status "${svcs[@]}" ;;
+      2) manage_action start "${svcs[@]}" ;;
+      3) manage_action stop "${svcs[@]}" ;;
+      4) manage_action restart "${svcs[@]}" ;;
+      q) return 0 ;;
+      *) echo "Invalid option, try again." ;;
+    esac
+  done
+}
+
+run_helper() {
+  local helper="${SCRIPT_DIR}/psvc-$1"
+  shift
+  [[ -f "$helper" ]] || psvc_die "Missing helper: $helper"
+  exec bash "$helper" "$@"
+}
+
+main() {
+  case "${1:-}" in
+    doctor|print) run_helper "$@" ;;
+    ""|-h|--help) usage; exit 0 ;;
+  esac
+
+  psvc_require_cmd systemctl
+  local include_saned=0 action="" use_menu=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --include-saned) include_saned=1 ;;
+      --menu) use_menu=1 ;;
+      status|enable|disable|start|stop|restart) action="$1" ;;
+      *) echo "Unknown option or action: $1" >&2; usage; exit 2 ;;
+    esac
+    shift
+  done
+
+  local services=()
+  while IFS= read -r svc; do
+    [[ -n "$svc" ]] && services+=("$svc")
+  done < <(collect_services "$include_saned")
+  [[ ${#services[@]} -gt 0 ]] || psvc_die "No existing service units to manage."
+  [[ $use_menu -eq 1 ]] && interactive_menu "${services[@]}" && return 0
+  [[ -n "$action" ]] || { usage; exit 0; }
+  manage_action "$action" "${services[@]}"
+}
+
+main "$@"

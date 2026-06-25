@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-ONN_SCRIPT="${SCRIPTS_DIR}/onn"
+SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
+ONN_SCRIPT="${SCRIPTS_DIR}/bin/onn"
 
 if [[ ! -f "${ONN_SCRIPT}" ]]; then
   echo "Missing: ${ONN_SCRIPT}" >&2

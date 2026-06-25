@@ -1,0 +1,271 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/psvc-lib"
+
+QUEUE=""
+FAIL_COUNT=0
+WARN_COUNT=0
+DEVICE_URI=""
+DEVICE_HOST=""
+STRICT_NETWORK=0
+IPP_RETRIES=2
+IPP_TIMEOUT=5
+
+usage() {
+  cat <<'EOF'
+Read-only printing connectivity diagnostics.
+
+Usage:
+  psvc doctor [--queue name] [--strict-network]
+  psvc-doctor [--queue name] [--strict-network]
+
+Network probe failures are warnings by default because sleepy Wi-Fi printers
+can be slow to answer. Use --strict-network to make them hard failures.
+EOF
+}
+
+section() { printf '\n%s\n' "$1"; }
+
+report() {
+  local status="$1" message="$2"
+  [[ "$status" == "FAIL" ]] && FAIL_COUNT=$((FAIL_COUNT + 1))
+  [[ "$status" == "WARN" ]] && WARN_COUNT=$((WARN_COUNT + 1))
+  printf '[%s] %s\n' "$status" "$message"
+}
+
+report_network_issue() {
+  if [[ $STRICT_NETWORK -eq 1 ]]; then
+    report FAIL "$1"
+  else
+    report WARN "$1"
+  fi
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --queue)
+        [[ $# -ge 2 ]] || { echo "Missing value for --queue" >&2; exit 2; }
+        QUEUE="$2"
+        shift
+        ;;
+      --strict-network)
+        STRICT_NETWORK=1
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        usage
+        exit 2
+        ;;
+    esac
+    shift
+  done
+}
+
+check_commands() {
+  local cmd
+  section "Commands"
+  for cmd in lpstat lpq systemctl; do
+    if psvc_have_cmd "$cmd"; then
+      report PASS "Required command found: $cmd"
+    else
+      report FAIL "Missing required command: $cmd"
+    fi
+  done
+  for cmd in ip nc ping ippfind avahi-browse getent journalctl timeout; do
+    psvc_have_cmd "$cmd" || report WARN "Optional diagnostic command missing: $cmd"
+  done
+}
+
+check_units() {
+  local unit load active enabled
+  section "Services And Sockets"
+  psvc_have_cmd systemctl || return 0
+  for unit in cups.service cups.socket avahi-daemon.service avahi-daemon.socket; do
+    load="$(psvc_capture systemctl show -p LoadState --value "$unit" || true)"
+    if [[ "$load" == "not-found" || -z "$load" ]]; then
+      report WARN "Unit not found: $unit"
+      continue
+    fi
+    active="$(psvc_capture systemctl is-active "$unit" || true)"
+    enabled="$(psvc_capture systemctl is-enabled "$unit" || true)"
+    if [[ "$active" == "active" ]]; then
+      report PASS "$unit is active (enabled=$enabled)"
+    else
+      report WARN "$unit is $active (enabled=$enabled)"
+    fi
+  done
+}
+
+check_queue() {
+  local out jobs
+  section "Queue"
+  psvc_have_cmd lpstat || return 0
+  [[ -n "$QUEUE" ]] || QUEUE="$(psvc_default_queue || true)"
+  if [[ -z "$QUEUE" ]]; then
+    report FAIL "No queue specified and no default CUPS queue found"
+    return 0
+  fi
+  printf 'Queue: %s\n' "$QUEUE"
+
+  out="$(psvc_capture lpstat -p "$QUEUE" || true)"
+  if [[ "$out" == *" is idle"* || "$out" == *" now printing"* ]]; then
+    report PASS "CUPS queue '$QUEUE' exists and is ready"
+  elif [[ -n "$out" ]]; then
+    report WARN "CUPS queue '$QUEUE' status: $out"
+  else
+    report FAIL "CUPS queue '$QUEUE' was not found"
+  fi
+
+  DEVICE_URI="$(psvc_queue_uri "$QUEUE" || true)"
+  if [[ -n "$DEVICE_URI" ]]; then
+    printf 'Device URI: %s\n' "$DEVICE_URI"
+    DEVICE_HOST="$(psvc_extract_host "$DEVICE_URI" || true)"
+    [[ -n "$DEVICE_HOST" ]] || report WARN "Could not extract host from device URI"
+  else
+    report FAIL "Could not read device URI for queue '$QUEUE'"
+  fi
+
+  jobs="$(psvc_capture lpstat -W not-completed -o "$QUEUE" || true)"
+  if [[ -z "$jobs" ]]; then
+    report PASS "No incomplete jobs in '$QUEUE'"
+  else
+    report WARN "Incomplete jobs exist in '$QUEUE':"
+    printf '%s\n' "$jobs"
+  fi
+  psvc_have_cmd lpq && printf '%s\n' "$(psvc_capture lpq -P "$QUEUE" || true)"
+}
+
+check_network() {
+  local route neigh attempt
+  section "Network"
+  if [[ -z "$DEVICE_HOST" ]]; then
+    report WARN "Skipping network probes because no queue host was found"
+    return 0
+  fi
+  printf 'Queue host: %s\n' "$DEVICE_HOST"
+
+  if psvc_have_cmd ip; then
+    route="$(psvc_capture ip route get "$DEVICE_HOST" || true)"
+    [[ -n "$route" ]] && printf 'Route: %s\n' "$route"
+    if psvc_is_ipv4 "$DEVICE_HOST"; then
+      neigh="$(psvc_capture ip neigh show "$DEVICE_HOST" || true)"
+      [[ -n "$neigh" ]] && printf 'Neighbor: %s\n' "$neigh"
+    fi
+  fi
+  if psvc_have_cmd nc; then
+    for ((attempt = 1; attempt <= IPP_RETRIES; attempt++)); do
+      if nc -z -w "$IPP_TIMEOUT" "$DEVICE_HOST" 631 >/dev/null 2>&1; then
+        if [[ $attempt -eq 1 ]]; then
+          report PASS "IPP port 631 reachable at $DEVICE_HOST"
+        else
+          report PASS "IPP port 631 reachable at $DEVICE_HOST after retry $attempt/$IPP_RETRIES"
+        fi
+        break
+      fi
+    done
+    if [[ $attempt -gt $IPP_RETRIES ]]; then
+      report_network_issue "IPP port 631 is not reachable at $DEVICE_HOST after $IPP_RETRIES attempts"
+    fi
+  fi
+  if psvc_have_cmd ping && ping -c 3 -W 2 "$DEVICE_HOST" >/dev/null 2>&1; then
+    report PASS "Ping received a response from $DEVICE_HOST"
+  elif psvc_have_cmd ping; then
+    report WARN "Ping did not receive a response from $DEVICE_HOST"
+  fi
+}
+
+check_mdns_host() {
+  local host="$1"
+  [[ "$host" == *.local ]] || return 0
+  psvc_have_cmd getent || return 0
+  if getent hosts "$host" >/dev/null 2>&1; then
+    report PASS "mDNS hostname resolves through NSS: $host"
+  else
+    report WARN "mDNS hostname does not resolve through NSS: $host"
+  fi
+}
+
+check_discovery() {
+  local ipp_out avahi_out line host matched=0 discovered=0
+  section "Discovery"
+  if psvc_have_cmd ippfind; then
+    ipp_out="$(psvc_capture ippfind || true)"
+    if [[ -n "$ipp_out" ]]; then
+      report PASS "ippfind discovered IPP printer service(s)"
+      printf '%s\n' "$ipp_out"
+      while IFS= read -r line; do
+        host="$(psvc_extract_host "$line" || true)"
+        [[ -n "$host" ]] || continue
+        discovered=1
+        [[ "$host" == "$DEVICE_HOST" ]] && matched=1
+        check_mdns_host "$host"
+      done <<< "$ipp_out"
+    else
+      report WARN "ippfind did not discover any IPP printers"
+    fi
+  fi
+
+  if psvc_have_cmd avahi-browse; then
+    if psvc_have_cmd timeout; then
+      avahi_out="$(psvc_capture timeout 8 avahi-browse -rt _ipp._tcp || true)"
+    else
+      avahi_out="$(psvc_capture avahi-browse -rt _ipp._tcp || true)"
+    fi
+    if [[ -n "$avahi_out" ]]; then
+      report PASS "Avahi discovered IPP printer service(s)"
+      printf '%s\n' "$avahi_out"
+      if [[ "$avahi_out" == *"Failed to resolve service"* || "$avahi_out" == *"Timeout reached"* ]]; then
+        report WARN "Avahi discovery returned partial resolution errors"
+      fi
+      [[ -n "$DEVICE_HOST" && "$avahi_out" == *"$DEVICE_HOST"* ]] && matched=1
+    else
+      report WARN "Avahi did not discover any IPP printers"
+    fi
+  fi
+
+  check_mdns_host "$DEVICE_HOST"
+  if [[ -n "$DEVICE_HOST" && $discovered -eq 1 && $matched -eq 0 ]]; then
+    report WARN "Discovered IPP hosts did not exactly match configured host '$DEVICE_HOST'"
+  fi
+}
+
+check_logs() {
+  local avahi_logs cups_logs
+  section "Recent Logs"
+  psvc_have_cmd journalctl || return 0
+  avahi_logs="$(psvc_capture journalctl --no-pager -u avahi-daemon.service -n 80 || true)"
+  cups_logs="$(psvc_capture journalctl --no-pager -u cups.service -n 80 || true)"
+  if [[ "$avahi_logs" == *"Detected another IPv4 mDNS stack"* || "$avahi_logs" == *"Detected another IPv6 mDNS stack"* ]]; then
+    report WARN "Avahi reports another mDNS stack running; .local resolution may be unreliable"
+  else
+    report PASS "No recent Avahi duplicate-mDNS warning found"
+  fi
+  if [[ "$cups_logs" == *"Unable to connect"* || "$cups_logs" == *"Backend failed"* ]]; then
+    report WARN "Recent CUPS logs contain connection/backend errors"
+  else
+    report PASS "No recent CUPS connection/backend errors found"
+  fi
+}
+
+main() {
+  parse_args "$@"
+  echo "Printing Connectivity Doctor"
+  check_commands
+  check_units
+  check_queue
+  check_network
+  check_discovery
+  check_logs
+  section "Summary"
+  printf 'Failures: %s, warnings: %s\n' "$FAIL_COUNT" "$WARN_COUNT"
+  [[ $FAIL_COUNT -eq 0 ]]
+}
+
+main "$@"

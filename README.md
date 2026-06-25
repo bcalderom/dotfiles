@@ -25,3 +25,24 @@ then use GNU stow to create symlinks
 $ stow .
 ```
 
+The `scripts/bin` directory is the public command layer for personal scripts.
+Each command lives in its own directory under `scripts/`, with its own
+`README.md` and optional local `tests/` directory. `scripts/bin` contains
+relative symlinks so commands stay portable when the repo is stowed on another
+machine.
+
+## OBS setup script
+
+Use the OBS helper script in `scripts/obs/setup-obs.sh` to verify/install the
+minimum requirements for screen capture, audio capture, and webcam on Arch Linux.
+
+```bash
+bash scripts/obs/setup-obs.sh
+```
+
+Useful flags:
+
+```bash
+bash scripts/obs/setup-obs.sh --check-only
+bash scripts/obs/setup-obs.sh --dry-run
+```

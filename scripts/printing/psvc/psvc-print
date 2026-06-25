@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+source "${SCRIPT_DIR}/psvc-lib"
+
+QUEUE=""
+PRESET=""
+FILE=""
+DRY_RUN=0
+ASSUME_YES=0
+MEDIA="Letter"
+NUMBER_UP="1"
+LAYOUT="lrtb"
+SIDES="one-sided"
+DUPLEX="None"
+FIT_TO_PAGE=0
+
+usage() {
+  cat <<'EOF'
+Print with per-job options. Does not persist printer defaults.
+
+Usage:
+  psvc print [--queue name] [--preset name] [--dry-run] [file]
+
+Presets:
+  2up-short-edge  Letter, 2 pages per side, short-edge duplex
+  1up-one-sided   Letter, 1 page per side, one-sided
+  1up-long-edge   Letter, 1 page per side, long-edge duplex
+  custom          Prompt for media, pages per side, duplex, and scaling
+EOF
+}
+
+apply_preset() {
+  case "$1" in
+    2up-short-edge)
+      MEDIA="Letter"; NUMBER_UP="2"; LAYOUT="lrtb"
+      SIDES="two-sided-short-edge"; DUPLEX="DuplexTumble"; FIT_TO_PAGE=1
+      ;;
+    1up-one-sided)
+      MEDIA="Letter"; NUMBER_UP="1"; LAYOUT="lrtb"
+      SIDES="one-sided"; DUPLEX="None"; FIT_TO_PAGE=1
+      ;;
+    1up-long-edge)
+      MEDIA="Letter"; NUMBER_UP="1"; LAYOUT="lrtb"
+      SIDES="two-sided-long-edge"; DUPLEX="DuplexNoTumble"; FIT_TO_PAGE=1
+      ;;
+    custom) custom_menu ;;
+    *) psvc_die "Unknown preset: $1" 2 ;;
+  esac
+}
+
+prompt_default() {
+  local prompt="$1" default="$2" value
+  read -r -p "$prompt [$default]: " value
+  printf '%s\n' "${value:-$default}"
+}
+
+choose_sides() {
+  local choice
+  echo "Two-sided option:"
+  echo "1) one-sided"
+  echo "2) two-sided-short-edge"
+  echo "3) two-sided-long-edge"
+  read -r -p "Select [1]: " choice
+  case "${choice:-1}" in
+    1) SIDES="one-sided"; DUPLEX="None" ;;
+    2) SIDES="two-sided-short-edge"; DUPLEX="DuplexTumble" ;;
+    3) SIDES="two-sided-long-edge"; DUPLEX="DuplexNoTumble" ;;
+    *) psvc_die "Invalid two-sided option" 2 ;;
+  esac
+}
+
+custom_menu() {
+  local fit
+  MEDIA="$(prompt_default "Paper size" "Letter")"
+  NUMBER_UP="$(prompt_default "Pages per side" "2")"
+  LAYOUT="$(prompt_default "Page ordering" "lrtb")"
+  choose_sides
+  fit="$(prompt_default "Fit to page? (y/n)" "y")"
+  [[ "${fit,,}" == y* ]] && FIT_TO_PAGE=1 || FIT_TO_PAGE=0
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --queue) QUEUE="${2:-}"; [[ -n "$QUEUE" ]] || psvc_die "Missing value for --queue" 2; shift ;;
+      --preset) PRESET="${2:-}"; [[ -n "$PRESET" ]] || psvc_die "Missing value for --preset" 2; shift ;;
+      --media) MEDIA="${2:-}"; [[ -n "$MEDIA" ]] || psvc_die "Missing value for --media" 2; shift ;;
+      --number-up) NUMBER_UP="${2:-}"; [[ -n "$NUMBER_UP" ]] || psvc_die "Missing value for --number-up" 2; shift ;;
+      --layout) LAYOUT="${2:-}"; [[ -n "$LAYOUT" ]] || psvc_die "Missing value for --layout" 2; shift ;;
+      --sides) SIDES="${2:-}"; [[ -n "$SIDES" ]] || psvc_die "Missing value for --sides" 2; shift ;;
+      --duplex) DUPLEX="${2:-}"; [[ -n "$DUPLEX" ]] || psvc_die "Missing value for --duplex" 2; shift ;;
+      --fit-to-page) FIT_TO_PAGE=1 ;;
+      --no-fit-to-page) FIT_TO_PAGE=0 ;;
+      --dry-run) DRY_RUN=1 ;;
+      -y|--yes) ASSUME_YES=1 ;;
+      -h|--help) usage; exit 0 ;;
+      --*) psvc_die "Unknown option: $1" 2 ;;
+      *) [[ -z "$FILE" ]] || psvc_die "Only one file can be printed" 2; FILE="$1" ;;
+    esac
+    shift
+  done
+}
+
+interactive_setup() {
+  [[ -n "$FILE" ]] || FILE="$(prompt_default "File to print" "")"
+  [[ -n "$QUEUE" ]] || QUEUE="$(prompt_default "Printer queue" "${QUEUE:-brother_t720dw}")"
+  if [[ -z "$PRESET" ]]; then
+    echo "Preset:"
+    echo "1) 2up-short-edge"
+    echo "2) 1up-one-sided"
+    echo "3) 1up-long-edge"
+    echo "4) custom"
+    local choice
+    read -r -p "Select [1]: " choice
+    case "${choice:-1}" in
+      1) PRESET="2up-short-edge" ;;
+      2) PRESET="1up-one-sided" ;;
+      3) PRESET="1up-long-edge" ;;
+      4) PRESET="custom" ;;
+      *) psvc_die "Invalid preset" 2 ;;
+    esac
+  fi
+}
+
+validate_file() {
+  [[ -f "$FILE" ]] || psvc_die "File not found: $FILE" 2
+  case "${FILE,,}" in
+    *.pdf|*.ps|*.txt|*.png|*.jpg|*.jpeg) ;;
+    *) echo "Warning: CUPS may not print this format directly; PDF is safest." >&2 ;;
+  esac
+}
+
+build_command() {
+  LP_CMD=(lp -d "$QUEUE" -o "media=$MEDIA" -o "number-up=$NUMBER_UP" -o "number-up-layout=$LAYOUT" -o "sides=$SIDES" -o "Duplex=$DUPLEX")
+  [[ $FIT_TO_PAGE -eq 1 ]] && LP_CMD+=(-o fit-to-page)
+  LP_CMD+=("$FILE")
+}
+
+print_command() {
+  printf 'Command:'
+  printf ' %q' "${LP_CMD[@]}"
+  printf '\n'
+}
+
+confirm() {
+  local answer
+  [[ $ASSUME_YES -eq 1 || $DRY_RUN -eq 1 ]] && return 0
+  read -r -p "Send print job? [y/N]: " answer
+  [[ "${answer,,}" == y* ]]
+}
+
+main() {
+  parse_args "$@"
+  psvc_require_cmd lp
+  psvc_require_cmd lpstat
+  [[ -n "$QUEUE" ]] || QUEUE="$(psvc_default_queue || true)"
+  if [[ $# -eq 0 || ( -z "$FILE" && -t 0 ) ]]; then
+    interactive_setup
+  fi
+  [[ -n "$PRESET" ]] && apply_preset "$PRESET"
+  [[ -n "$FILE" ]] || psvc_die "No file selected" 2
+  [[ -n "$QUEUE" ]] || psvc_die "No printer queue selected" 2
+  psvc_queue_exists "$QUEUE" || psvc_die "Printer queue not found: $QUEUE" 2
+  validate_file
+  build_command
+  print_command
+  [[ $DRY_RUN -eq 1 ]] && exit 0
+  confirm || psvc_die "Print canceled." 1
+  "${LP_CMD[@]}"
+}
+
+main "$@"

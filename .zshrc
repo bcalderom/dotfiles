@@ -108,7 +108,7 @@ path=(
     $path                           # Keep existing PATH entries
     $HOME/bin
     $HOME/.local/bin
-    $HOME/dotfiles/scripts
+    $HOME/scripts/bin
 )
 
 # Remove duplicate entries and non-existent directories
@@ -189,7 +189,7 @@ alias cd="z"
 
 # cd directories
 alias dot='cd ~/dotfiles'
-alias scripts='cd ~/dotfiles/scripts/'
+alias scripts='cd ~/scripts/'
 alias hypr='nvim ~/dotfiles/.config/hypr/hyprland.conf' 
 
 # Changing "ls" to "eza"
@@ -251,7 +251,7 @@ eval "$(zoxide init zsh)"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
 
 # Key binding for sesh sessions
-[[ -f "$HOME/dotfiles/scripts/sesh-sessions" ]] && source "$HOME/dotfiles/scripts/sesh-sessions"
+[[ -f "$HOME/scripts/tmux/sesh-sessions/sesh-sessions" ]] && source "$HOME/scripts/tmux/sesh-sessions/sesh-sessions"
 zle     -N             sesh-sessions
 bindkey -M emacs '\es' sesh-sessions
 bindkey -M vicmd '\es' sesh-sessions
