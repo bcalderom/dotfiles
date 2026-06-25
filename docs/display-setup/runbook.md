@@ -119,6 +119,7 @@ Check the backup systemd watcher:
 ```bash
 systemctl --user status hypr-lid.service
 systemd-analyze --user verify ~/.config/systemd/user/hypr-lid.service
+systemctl --user show-environment | grep -E 'HYPRLAND_INSTANCE_SIGNATURE|WAYLAND_DISPLAY'
 ```
 
 ## Re-run Audio Routing

@@ -59,6 +59,7 @@ hyprctl workspaces
 hyprctl workspacerules
 kanshictl status
 systemctl --user status hypr-lid.service
+systemctl --user show-environment | grep -E 'HYPRLAND_INSTANCE_SIGNATURE|WAYLAND_DISPLAY'
 grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
 ```
 

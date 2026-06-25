@@ -10,6 +10,35 @@ LID_WATCH_ITERATIONS="${LID_WATCH_ITERATIONS:-}"
 LID_INTERNAL_OUTPUT="${LID_INTERNAL_OUTPUT:-eDP-1}"
 LID_EXTERNAL_OUTPUT="${LID_EXTERNAL_OUTPUT:-DP-1}"
 
+ensure_hyprland_env() {
+  local instance
+
+  command -v hyprctl >/dev/null 2>&1 || return 1
+
+  if hyprctl monitors >/dev/null 2>&1; then
+    return 0
+  fi
+
+  instance="$(env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY hyprctl instances 2>/dev/null | awk '
+    /^instance / {
+      signature = $2
+      sub(/:$/, "", signature)
+    }
+    /^[[:space:]]*wl socket:/ && signature != "" {
+      print signature " " $3
+      exit
+    }
+  ')"
+
+  [ -n "${instance}" ] || return 1
+
+  HYPRLAND_INSTANCE_SIGNATURE="${instance%% *}"
+  WAYLAND_DISPLAY="${instance#* }"
+  export HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY
+
+  hyprctl monitors >/dev/null 2>&1
+}
+
 read_lid_state() {
   if grep -q closed "${LID_STATE_PATH}" 2>/dev/null; then
     printf 'closed'
@@ -21,6 +50,7 @@ read_lid_state() {
 }
 
 run_handler() {
+  ensure_hyprland_env || return 0
   [ -x "${LID_HANDLER}" ] || return 0
   "${LID_HANDLER}" >/dev/null 2>&1 || true
 }
@@ -28,7 +58,7 @@ run_handler() {
 read_monitor_state() {
   local monitors external internal
 
-  if ! command -v hyprctl >/dev/null 2>&1; then
+  if ! ensure_hyprland_env; then
     printf 'external:unknown|internal:unknown'
     return 0
   fi
@@ -67,6 +97,7 @@ profile_mismatch() {
 
   expected_prefix="$1"
 
+  ensure_hyprland_env || return 1
   command -v kanshictl >/dev/null 2>&1 || return 1
   profile="$(kanshictl status 2>/dev/null | awk -F': ' '/^Current profile:/ { print $2; exit }')"
   [ -n "${profile}" ] || return 1
@@ -87,6 +118,7 @@ workspace_rule_mismatch() {
   workspace="$1"
   monitor="$2"
 
+  ensure_hyprland_env || return 1
   rules="$(hyprctl -j workspacerules 2>/dev/null || true)"
   [ -n "${rules}" ] || return 1
   compact="$(printf '%s' "${rules}" | tr -d '[:space:]')"
@@ -107,6 +139,7 @@ workspace_location_mismatch() {
   workspace="$1"
   monitor="$2"
 
+  ensure_hyprland_env || return 1
   workspaces="$(hyprctl workspaces 2>/dev/null || true)"
   [ -n "${workspaces}" ] || return 1
 

@@ -29,7 +29,23 @@ cat > "${MOCK_BIN}/hyprctl" <<'EOF'
 set -euo pipefail
 
 case "${1:-}" in
+  -j)
+    shift
+    ;;
+esac
+
+case "${1:-}" in
+  instances)
+    printf 'instance test-signature:\n'
+    printf '\ttime: 1\n'
+    printf '\tpid: 123\n'
+    printf '\twl socket: wayland-test\n'
+    ;;
   monitors)
+    if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
+      exit 1
+    fi
+
     case "$(cat "${MONITOR_STATE_PATH}")" in
       both)
         printf 'Monitor DP-1 (ID 1):\n'
@@ -44,6 +60,10 @@ case "${1:-}" in
     esac
     ;;
   workspacerules)
+    if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
+      exit 1
+    fi
+
     case "$(cat "${RULE_STATE_PATH}")" in
       docked)
         printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"}]\n'
@@ -57,6 +77,10 @@ case "${1:-}" in
     esac
     ;;
   workspaces)
+    if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
+      exit 1
+    fi
+
     case "$(cat "${RULE_STATE_PATH}")" in
       docked)
         printf 'workspace ID 1 (1) on monitor DP-1:\n'
@@ -81,6 +105,10 @@ cat > "${MOCK_BIN}/kanshictl" <<'EOF'
 set -euo pipefail
 
 if [[ "${1:-}" == "status" ]]; then
+  if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
+    exit 1
+  fi
+
   printf 'Current profile: %s\n' "$(cat "${PROFILE_STATE_PATH}")"
 fi
 EOF
@@ -92,6 +120,11 @@ set -euo pipefail
 
 lid_state="$(grep -o 'closed\|open' "${LID_STATE_PATH}")"
 monitor_state="$(cat "${MONITOR_STATE_PATH}")"
+
+if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
+  printf 'missing-hyprland-env\n' >> "${HANDLER_LOG}"
+  exit 1
+fi
 
 printf '%s %s %s %s\n' "${lid_state}" "${monitor_state}" "$(cat "${PROFILE_STATE_PATH}")" "$(cat "${RULE_STATE_PATH}")" >> "${HANDLER_LOG}"
 
@@ -117,7 +150,7 @@ printf 'external\n' > "${MONITOR_STATE_PATH}"
 printf 'docked_dp_only\n' > "${PROFILE_STATE_PATH}"
 printf 'docked\n' > "${RULE_STATE_PATH}"
 
-PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
 sleep 0.15
@@ -145,7 +178,7 @@ printf 'internal\n' > "${MONITOR_STATE_PATH}"
 printf 'laptop\n' > "${PROFILE_STATE_PATH}"
 printf 'laptop\n' > "${RULE_STATE_PATH}"
 
-PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=25 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=25 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
 sleep 0.15
@@ -174,7 +207,7 @@ printf 'external\n' > "${MONITOR_STATE_PATH}"
 printf 'docked_dp_only\n' > "${PROFILE_STATE_PATH}"
 printf 'docked\n' > "${RULE_STATE_PATH}"
 
-PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
 sleep 0.15

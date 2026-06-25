@@ -53,6 +53,7 @@ Important lines:
 
 - `exec-once = kanshi`
 - `exec-once = ~/.config/hypr/scripts/lid.sh`
+- `exec-once = bash -lc 'dbus-update-activation-environment --systemd WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP; systemctl --user restart hypr-lid.service'`
 - `exec-once = [workspace 1 silent] $browser`
 - `exec-once = [workspace 2 silent] $terminal`
 - `bindl = ,switch:on:Lid Switch,exec,~/.config/hypr/scripts/lid.sh`
@@ -91,6 +92,7 @@ Known cleanup:
 - `~/.config/systemd/user/hypr-lid.service` runs `lid-watch.sh` as a backup to Hyprland switch binds because path watching `/proc/acpi/button/lid/LID0/state` is not reliable after system updates.
 - `lid-watch.sh` also watches monitor topology so USB-C connect/disconnect events reconcile workspace rules even when the lid state does not change.
 - `lid-watch.sh` reconciles stable invalid states too, such as a closed lid with `eDP-1` still active or workspace rules pointing at the wrong output.
+- `lid-watch.sh` discovers the active Hyprland instance with `hyprctl instances` if systemd starts it without `HYPRLAND_INSTANCE_SIGNATURE` or `WAYLAND_DISPLAY`.
 
 ## Audio Routing
 
