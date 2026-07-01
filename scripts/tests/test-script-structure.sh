@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 command_dirs=(
+  brother/install-brother-hl1212w
   brother/install-brother-t720dw
   desktop/hypr-lid-deploy
   desktop/onn
