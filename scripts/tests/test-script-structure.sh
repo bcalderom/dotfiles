@@ -35,7 +35,7 @@ bin_links=(
   ssf
   tds
   topdisk
-  yay-cleaner.sh
+  yay-cleaner
 )
 
 for dir in "${command_dirs[@]}"; do
