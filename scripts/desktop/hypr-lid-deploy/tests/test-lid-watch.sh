@@ -51,6 +51,10 @@ case "${1:-}" in
         printf 'Monitor DP-1 (ID 1):\n'
         printf 'Monitor eDP-1 (ID 0):\n'
         ;;
+      mirror)
+        printf 'Monitor eDP-1 (ID 0):\n'
+        printf 'Monitor HDMI-A-1 (ID 2):\n'
+        ;;
       external)
         printf 'Monitor DP-1 (ID 1):\n'
         ;;
@@ -66,13 +70,16 @@ case "${1:-}" in
 
     case "$(cat "${RULE_STATE_PATH}")" in
       docked)
-        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"}]\n'
+        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"DP-1"}]\n'
         ;;
       docked-open)
-        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"eDP-1"}]\n'
+        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"eDP-1"}]\n'
         ;;
       laptop)
-        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"}]\n'
+        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1"}]\n'
+        ;;
+      mirror)
+        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1"}]\n'
         ;;
     esac
     ;;
@@ -85,14 +92,22 @@ case "${1:-}" in
       docked)
         printf 'workspace ID 1 (1) on monitor DP-1:\n'
         printf 'workspace ID 2 (2) on monitor DP-1:\n'
+        printf 'workspace ID 3 (3) on monitor DP-1:\n'
         ;;
       docked-open)
         printf 'workspace ID 1 (1) on monitor DP-1:\n'
-        printf 'workspace ID 2 (2) on monitor eDP-1:\n'
+        printf 'workspace ID 2 (2) on monitor DP-1:\n'
+        printf 'workspace ID 3 (3) on monitor eDP-1:\n'
         ;;
       laptop)
         printf 'workspace ID 1 (1) on monitor eDP-1:\n'
         printf 'workspace ID 2 (2) on monitor eDP-1:\n'
+        printf 'workspace ID 3 (3) on monitor eDP-1:\n'
+        ;;
+      mirror)
+        printf 'workspace ID 1 (1) on monitor eDP-1:\n'
+        printf 'workspace ID 2 (2) on monitor eDP-1:\n'
+        printf 'workspace ID 3 (3) on monitor eDP-1:\n'
         ;;
     esac
     ;;
@@ -140,6 +155,10 @@ case "${lid_state}:${monitor_state}" in
   open:internal)
     printf 'laptop\n' > "${PROFILE_STATE_PATH}"
     printf 'laptop\n' > "${RULE_STATE_PATH}"
+    ;;
+  open:mirror)
+    printf 'mirror\n' > "${PROFILE_STATE_PATH}"
+    printf 'mirror\n' > "${RULE_STATE_PATH}"
     ;;
 esac
 EOF
@@ -218,6 +237,22 @@ wait "${watch_pid}"
 
 if [[ "$(grep -Fc 'closed external laptop laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
   echo "Expected one stable-state mismatch reconciliation" >&2
+  exit 1
+fi
+
+: > "${HANDLER_LOG}"
+printf 'state: open\n' > "${LID_STATE_PATH}"
+printf 'mirror\n' > "${MONITOR_STATE_PATH}"
+printf 'laptop\n' > "${PROFILE_STATE_PATH}"
+printf 'laptop\n' > "${RULE_STATE_PATH}"
+
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+watch_pid="$!"
+
+wait "${watch_pid}"
+
+if [[ "$(grep -Fc 'open mirror laptop laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
+  echo "Expected one HDMI mirror reconciliation" >&2
   exit 1
 fi
 

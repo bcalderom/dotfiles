@@ -69,7 +69,7 @@ hyprctl workspacerules
 kanshictl status
 ```
 
-Expected result: only `DP-1` is enabled, workspace `1` and `2` are on `DP-1`, workspace rules bind both workspaces to `DP-1`, and kanshi reports `docked_dp_only` or `docked_dp_hdmi`.
+Expected result: only `DP-1` is enabled, workspaces `1`, `2`, and `3` are on `DP-1`, workspace rules bind those workspaces to `DP-1`, the previously active workspace remains active, and kanshi reports `docked_dp_only` or `docked_dp_hdmi`.
 
 Force open-lid correction:
 
@@ -86,7 +86,7 @@ hyprctl workspacerules
 kanshictl status
 ```
 
-Expected result when `DP-1` is present: both `DP-1` and `eDP-1` are enabled, `eDP-1` has `dpmsStatus: 1`, workspace `1` is on `DP-1`, workspace `2` is on `eDP-1`, workspace rules match that split, and kanshi reports `docked_open_dp_only` or `docked_open_dp_hdmi`.
+Expected result when `DP-1` is present: both `DP-1` and `eDP-1` are enabled, `eDP-1` has `dpmsStatus: 1`, workspaces `1` and `2` are on `DP-1`, persistent workspace `3` is on `eDP-1`, workspace rules match that split, the previously active workspace remains active, and kanshi reports `docked_open_dp_only` or `docked_open_dp_hdmi`.
 
 Validate open-lid/unplug correction:
 
@@ -97,7 +97,9 @@ hyprctl workspacerules
 kanshictl status
 ```
 
-Expected result when `DP-1` is absent: `eDP-1` is enabled with `dpmsStatus: 1`, workspace `1` and `2` are on `eDP-1`, workspace rules bind both workspaces to `eDP-1`, and kanshi reports `laptop`.
+Expected result when `DP-1` and HDMI are absent: `eDP-1` is enabled with `dpmsStatus: 1`, workspaces `1`, `2`, and `3` are on `eDP-1`, workspace rules bind those workspaces to `eDP-1`, the previously active workspace remains active, and kanshi reports `laptop`.
+
+Expected result when `DP-1` is absent and HDMI is present: `eDP-1` is enabled with `dpmsStatus: 1`, `HDMI-A-1` mirrors `eDP-1`, workspaces remain on `eDP-1`, and kanshi reports `mirror`.
 
 If `eDP-1` does not remain enabled after `lid.sh open`, check `kanshictl status`; it should not remain on `docked_dp_only` or `docked_dp_hdmi` after opening the lid.
 
@@ -110,9 +112,9 @@ hyprctl binds
 
 Expected binds:
 
-- `switch:on:Lid Switch` runs `~/.config/hypr/scripts/lid.sh`.
-- `switch:off:Lid Switch` runs `~/.config/hypr/scripts/lid.sh`.
-- The script reads `/proc/acpi/button/lid/LID0/state` to decide between closed and open behavior.
+- `switch:on:Lid Switch` runs `~/.config/hypr/scripts/lid.sh closed`.
+- `switch:off:Lid Switch` runs `~/.config/hypr/scripts/lid.sh open`.
+- The script still reads `/proc/acpi/button/lid/LID0/state` when called without an explicit state.
 
 Check the backup systemd watcher:
 
@@ -149,7 +151,7 @@ If browser or terminal appears on the wrong workspace after login, inspect the H
 Syntax-check shell hooks:
 
 ```bash
-bash -n ~/.config/kanshi/post-docked.sh ~/.config/kanshi/post-laptop.sh ~/.config/kanshi/post-mirror.sh ~/.config/kanshi/audio-route.sh ~/.config/kanshi/audio-route-watch.sh ~/.config/hypr/scripts/lid.sh
+bash -n ~/.config/kanshi/post-docked.sh ~/.config/kanshi/post-docked-open.sh ~/.config/kanshi/post-laptop.sh ~/.config/kanshi/post-mirror.sh ~/.config/kanshi/audio-route.sh ~/.config/kanshi/audio-route-watch.sh ~/.config/hypr/scripts/lid.sh ~/.config/hypr/scripts/lid-watch.sh
 ```
 
 Then log out and log back in for full startup validation.

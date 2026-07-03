@@ -17,11 +17,20 @@ while [ "$i" -lt 30 ]; do
   i=$((i + 1))
 done
 
+current_ws="$(hyprctl activeworkspace 2>/dev/null | awk '/^workspace ID/ { print $3; exit }')"
+
 hyprctl keyword workspace "1,monitor:DP-1" >/dev/null 2>&1 || true
 hyprctl keyword workspace "2,monitor:DP-1" >/dev/null 2>&1 || true
+hyprctl keyword workspace "3,monitor:DP-1,persistent:true" >/dev/null 2>&1 || true
 
 hyprctl dispatch moveworkspacetomonitor 1 DP-1 >/dev/null 2>&1 || true
 hyprctl dispatch moveworkspacetomonitor 2 DP-1 >/dev/null 2>&1 || true
+hyprctl dispatch moveworkspacetomonitor 3 DP-1 >/dev/null 2>&1 || true
+
+if [ -n "$current_ws" ]; then
+  hyprctl dispatch moveworkspacetomonitor "$current_ws" DP-1 >/dev/null 2>&1 || true
+  hyprctl dispatch workspace "$current_ws" >/dev/null 2>&1 || true
+fi
 
 ~/.config/kanshi/audio-route.sh >/dev/null 2>&1 || true
 reload_waybar

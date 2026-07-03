@@ -26,9 +26,11 @@ done
 
 hyprctl keyword workspace "1,monitor:$INTERNAL" >/dev/null 2>&1 || true
 hyprctl keyword workspace "2,monitor:$INTERNAL" >/dev/null 2>&1 || true
+hyprctl keyword workspace "3,monitor:$INTERNAL,persistent:true" >/dev/null 2>&1 || true
 
 hyprctl dispatch moveworkspacetomonitor 1 "$INTERNAL" >/dev/null 2>&1 || true
 hyprctl dispatch moveworkspacetomonitor 2 "$INTERNAL" >/dev/null 2>&1 || true
+hyprctl dispatch moveworkspacetomonitor 3 "$INTERNAL" >/dev/null 2>&1 || true
 
 if [ -n "$current_ws" ]; then
   hyprctl dispatch moveworkspacetomonitor "$current_ws" "$INTERNAL" >/dev/null 2>&1 || true

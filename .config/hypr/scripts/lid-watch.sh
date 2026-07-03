@@ -9,6 +9,11 @@ LID_RECONCILE_INTERVAL="${LID_RECONCILE_INTERVAL:-5}"
 LID_WATCH_ITERATIONS="${LID_WATCH_ITERATIONS:-}"
 LID_INTERNAL_OUTPUT="${LID_INTERNAL_OUTPUT:-eDP-1}"
 LID_EXTERNAL_OUTPUT="${LID_EXTERNAL_OUTPUT:-DP-1}"
+LID_HDMI_OUTPUT="${LID_HDMI_OUTPUT:-HDMI-A-1}"
+
+log() {
+  printf 'hypr-lid: %s\n' "$*" >&2
+}
 
 ensure_hyprland_env() {
   local instance
@@ -50,34 +55,52 @@ read_lid_state() {
 }
 
 run_handler() {
+  local lid_state
+
+  lid_state="${1:-}"
+  case "${lid_state}" in
+    open|closed)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
   ensure_hyprland_env || return 0
   [ -x "${LID_HANDLER}" ] || return 0
-  "${LID_HANDLER}" >/dev/null 2>&1 || true
+  "${LID_HANDLER}" "${lid_state}" >/dev/null 2>&1 || true
 }
 
 read_monitor_state() {
-  local monitors external internal
+  local active_monitors all_monitors external internal hdmi
 
   if ! ensure_hyprland_env; then
     printf 'external:unknown|internal:unknown'
     return 0
   fi
 
-  monitors="$(hyprctl monitors 2>/dev/null || true)"
+  active_monitors="$(hyprctl monitors 2>/dev/null || true)"
+  all_monitors="$(hyprctl monitors all 2>/dev/null || printf '%s' "${active_monitors}")"
 
-  if grep -q "^Monitor ${LID_EXTERNAL_OUTPUT} " <<< "${monitors}"; then
+  if grep -q "^Monitor ${LID_EXTERNAL_OUTPUT} " <<< "${all_monitors}"; then
     external=1
   else
     external=0
   fi
 
-  if grep -q "^Monitor ${LID_INTERNAL_OUTPUT} " <<< "${monitors}"; then
+  if grep -q "^Monitor ${LID_INTERNAL_OUTPUT} " <<< "${active_monitors}"; then
     internal=1
   else
     internal=0
   fi
 
-  printf 'external:%s|internal:%s' "${external}" "${internal}"
+  if grep -q "^Monitor ${LID_HDMI_OUTPUT} " <<< "${all_monitors}"; then
+    hdmi=1
+  else
+    hdmi=0
+  fi
+
+  printf 'external:%s|internal:%s|hdmi:%s' "${external}" "${internal}" "${hdmi}"
 }
 
 read_watch_state() {
@@ -170,33 +193,47 @@ needs_reconcile() {
   case "$1" in
     closed\|external:1\|internal:*)
       case "$1" in
-        *\|internal:1)
+        *\|internal:1*)
           return 0
           ;;
       esac
       profile_mismatch docked_dp_ && return 0
       workspace_mismatch 1 "${LID_EXTERNAL_OUTPUT}" && return 0
       workspace_mismatch 2 "${LID_EXTERNAL_OUTPUT}" && return 0
+      workspace_mismatch 3 "${LID_EXTERNAL_OUTPUT}" && return 0
       ;;
     open\|external:1\|internal:*)
       case "$1" in
-        *\|internal:0)
+        *\|internal:0*)
           return 0
           ;;
       esac
       profile_mismatch docked_open_dp_ && return 0
       workspace_mismatch 1 "${LID_EXTERNAL_OUTPUT}" && return 0
-      workspace_mismatch 2 "${LID_INTERNAL_OUTPUT}" && return 0
+      workspace_mismatch 2 "${LID_EXTERNAL_OUTPUT}" && return 0
+      workspace_mismatch 3 "${LID_INTERNAL_OUTPUT}" && return 0
       ;;
-    open\|external:0\|internal:*)
+    open\|external:0\|internal:*\|hdmi:1)
       case "$1" in
-        *\|internal:0)
+        *\|internal:0*)
+          return 0
+          ;;
+      esac
+      profile_mismatch mirror && return 0
+      workspace_mismatch 1 "${LID_INTERNAL_OUTPUT}" && return 0
+      workspace_mismatch 2 "${LID_INTERNAL_OUTPUT}" && return 0
+      workspace_mismatch 3 "${LID_INTERNAL_OUTPUT}" && return 0
+      ;;
+    open\|external:0\|internal:*\|hdmi:0)
+      case "$1" in
+        *\|internal:0*)
           return 0
           ;;
       esac
       profile_mismatch laptop && return 0
       workspace_mismatch 1 "${LID_INTERNAL_OUTPUT}" && return 0
       workspace_mismatch 2 "${LID_INTERNAL_OUTPUT}" && return 0
+      workspace_mismatch 3 "${LID_INTERNAL_OUTPUT}" && return 0
       ;;
   esac
 
@@ -225,7 +262,8 @@ while :; do
 
     if [ "${state}" != "unknown" ] && { [ "${state}" != "${last_state}" ] || needs_reconcile "${state}"; }; then
       last_state="${state}"
-      run_handler
+      log "handling ${state}"
+      run_handler "${state%%|*}"
     fi
   fi
 

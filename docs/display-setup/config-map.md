@@ -32,7 +32,7 @@ Files:
 Responsibilities:
 
 - Wait briefly for Hyprland to expose the expected monitor.
-- Set Hyprland workspace monitor rules and move workspace `1` and `2` to the expected monitor for docked/laptop modes.
+- Set Hyprland workspace monitor rules and move workspaces `1`, `2`, `3`, and the active workspace to the expected monitor for docked, laptop, and mirror modes.
 - Force `eDP-1` and DPMS on in laptop mode to recover after unplugging from docked mode.
 - Apply mirror-specific Hyprland monitor keywords.
 - Re-run audio routing after the display profile changes.
@@ -56,8 +56,8 @@ Important lines:
 - `exec-once = bash -lc 'dbus-update-activation-environment --systemd WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP; systemctl --user restart hypr-lid.service'`
 - `exec-once = [workspace 1 silent] $browser`
 - `exec-once = [workspace 2 silent] $terminal`
-- `bindl = ,switch:on:Lid Switch,exec,~/.config/hypr/scripts/lid.sh`
-- `bindl = ,switch:off:Lid Switch,exec,~/.config/hypr/scripts/lid.sh`
+- `bindl = ,switch:on:Lid Switch,exec,~/.config/hypr/scripts/lid.sh closed`
+- `bindl = ,switch:off:Lid Switch,exec,~/.config/hypr/scripts/lid.sh open`
 
 ## Lid Handling
 
@@ -70,11 +70,12 @@ Files:
 Responsibilities:
 
 - Run once at startup to handle sessions that start with the lid already closed.
-- Read the current lid state when called without arguments so switch events do not depend on Hyprland's `on`/`off` naming.
-- Run a user service watcher that polls lid state and active `DP-1`/`eDP-1` presence, then calls `lid.sh` when either changes.
-- If lid closes and `DP-1` exists, switch kanshi to a docked profile, bind workspace `1` and `2` to `DP-1`, move workspace `1`, workspace `2`, and the active workspace to `DP-1`, then disable `eDP-1`.
-- If lid opens and `DP-1` is still present, switch kanshi to a docked-open profile, request `eDP-1` with preferred mode, force DPMS on, bind workspace `1` to `DP-1`, bind workspace `2` to `eDP-1`, then move them to those monitors.
-- If lid opens and `DP-1` is absent, switch kanshi to `laptop`, request `eDP-1` with preferred mode, force DPMS on, bind workspace `1` and `2` to `eDP-1`, and move workspace `1`, workspace `2`, and the active workspace to `eDP-1`.
+- Accept explicit `open`/`closed` arguments from Hyprland switch binds and the watcher; fall back to reading the lid state when called without arguments.
+- Run a user service watcher that polls lid state and `DP-1`/`eDP-1`/`HDMI-A-1` topology, then calls `lid.sh` when either changes.
+- If lid closes and `DP-1` exists, switch kanshi to a docked profile, bind/move workspaces `1`, `2`, `3`, and the active workspace to `DP-1`, disable `eDP-1`, then restore the previously active workspace.
+- If lid opens and `DP-1` is still present, switch kanshi to a docked-open profile, request `eDP-1` with preferred mode, force DPMS on, keep workspaces `1` and `2` on `DP-1`, keep persistent workspace `3` on `eDP-1`, and restore the previously active workspace.
+- If lid opens and `DP-1` is absent but `HDMI-A-1` is present, switch kanshi to `mirror`, keep `eDP-1` as the master output, mirror it to HDMI, move workspaces to `eDP-1`, and restore the previously active workspace.
+- If lid opens and no external display is present, switch kanshi to `laptop`, request `eDP-1` with preferred mode, force DPMS on, bind/move workspaces `1`, `2`, `3`, and the active workspace to `eDP-1`, and restore the previously active workspace.
 
 Implementation details:
 
@@ -82,9 +83,10 @@ Implementation details:
 - If that does not match the current output set, it falls back to `kanshictl switch docked_dp_only`.
 - This prevents kanshi from staying on `laptop` and immediately re-enabling `eDP-1` after Hyprland disables it.
 - `lid.sh open` switches to `docked_open_dp_hdmi` or `docked_open_dp_only` while `DP-1` is still present.
-- In docked-open mode, active workspaces other than `1` and `2` fall back to workspace `2` so the opened laptop panel is immediately usable.
-- When opening from workspace `1`, the handler briefly focuses workspace `2` and then restores workspace `1` so Hyprland drops the temporary empty workspace it creates for `eDP-1`.
-- `lid.sh open` switches to `laptop` only when `DP-1` is absent.
+- `lid.sh open` gives `DP-1` priority over HDMI when both are connected, matching the kanshi docked profiles that disable HDMI in docked mode.
+- In docked-open mode, workspace `3` is persistent on `eDP-1`; focus is not forced to it.
+- `lid.sh open` switches to `mirror` when `DP-1` is absent and `HDMI-A-1` is connected.
+- `lid.sh open` switches to `laptop` only when `DP-1` and `HDMI-A-1` are absent.
 - The `hyprctl keyword workspace "N,monitor:OUTPUT"` rules are updated during each transition so later manual workspace switches stay on the intended display.
 
 Known cleanup:

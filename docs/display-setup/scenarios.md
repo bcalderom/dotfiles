@@ -13,8 +13,8 @@ Use this when working at the desk with the USB-C external monitor and the laptop
 | Internal display | Disabled |
 | External display | `DP-1` enabled at `2560x1440@120.01Hz` |
 | HDMI display | Disabled in `docked_dp_hdmi` |
-| Workspaces | Workspace `1` and `2` moved to `DP-1` |
-| Lid close | Switches kanshi to a docked profile, moves workspace `1` and `2` to `DP-1`, then disables `eDP-1` |
+| Workspaces | Workspaces `1`, `2`, `3`, and the active workspace moved to `DP-1` |
+| Lid close | Switches kanshi to a docked profile, moves workspaces to `DP-1`, disables `eDP-1`, then restores the previously active workspace |
 | Audio | Prefer external USB/Bluetooth sink; otherwise HDMI sink when `DP-1` is active |
 
 Verification:
@@ -30,8 +30,9 @@ systemctl --user status kanshi-audio-route.service
 Expected docked validation:
 
 - `hyprctl monitors` shows `DP-1` only.
-- `hyprctl workspaces` shows workspace `1` and `2` on `DP-1`.
-- `hyprctl workspacerules` shows workspace `1` and `2` bound to `DP-1`.
+- `hyprctl workspaces` shows workspace `1`, `2`, and `3` on `DP-1`.
+- `hyprctl workspacerules` shows workspace `1`, `2`, and `3` bound to `DP-1`.
+- `hyprctl activeworkspace` shows the same workspace number that was active before closing the lid.
 - `kanshictl status` shows `docked_dp_only` or `docked_dp_hdmi`.
 
 ## Docked Lid Open
@@ -44,7 +45,7 @@ Use this while still connected to the USB-C external monitor but with the laptop
 | Kanshi profile | `docked_open_dp_only` or `docked_open_dp_hdmi` |
 | Internal display | `eDP-1` enabled at preferred mode with DPMS on |
 | External display | `DP-1` remains enabled at `2560x1440@120.01Hz` |
-| Workspaces | Workspace `1` on `DP-1`; workspace `2` on `eDP-1`; focus falls back to workspace `2` if Hyprland creates a temporary empty workspace |
+| Workspaces | Workspaces `1` and `2` on `DP-1`; persistent workspace `3` on `eDP-1`; active workspace number preserved |
 | Audio | Prefer external USB/Bluetooth sink; otherwise HDMI sink when `DP-1` is active |
 
 Verification:
@@ -60,8 +61,9 @@ Expected docked-open validation:
 
 - `hyprctl monitors` shows both `DP-1` and `eDP-1` enabled.
 - `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
-- `hyprctl workspaces` shows workspace `1` on `DP-1` and workspace `2` on `eDP-1`.
-- `hyprctl workspacerules` shows workspace `1` bound to `DP-1` and workspace `2` bound to `eDP-1`.
+- `hyprctl workspaces` shows workspace `1` and `2` on `DP-1`, and workspace `3` on `eDP-1`.
+- `hyprctl workspacerules` shows workspace `1` and `2` bound to `DP-1`, and workspace `3` bound to `eDP-1`.
+- `hyprctl activeworkspace` shows the same workspace number that was active before opening the lid.
 - `kanshictl status` shows `docked_open_dp_only` or `docked_open_dp_hdmi`.
 
 ## Laptop Only
@@ -75,7 +77,7 @@ Use this in mobile/cafe mode with no external monitor.
 | Internal display | `eDP-1` enabled at preferred mode |
 | External display | Disabled/not present |
 | HDMI display | Disabled/not present |
-| Workspaces | Workspace `1`, workspace `2`, and the active workspace moved to `eDP-1` |
+| Workspaces | Workspaces `1`, `2`, `3`, and the active workspace moved to `eDP-1` |
 | Unplug recovery | Force `eDP-1` on, force DPMS on, switch kanshi to `laptop` when `DP-1` is absent |
 | Lid close | Normally suspends/locks according to system policy if no external monitor is available |
 | Audio | Prefer external USB/Bluetooth device; otherwise internal speaker/headphones |
@@ -94,8 +96,9 @@ Expected laptop validation:
 
 - `hyprctl monitors` shows `eDP-1` enabled.
 - `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
-- `hyprctl workspaces` shows workspace `1` and `2` on `eDP-1`.
-- `hyprctl workspacerules` shows workspace `1` and `2` bound to `eDP-1`.
+- `hyprctl workspaces` shows workspace `1`, `2`, and `3` on `eDP-1`.
+- `hyprctl workspacerules` shows workspace `1`, `2`, and `3` bound to `eDP-1`.
+- `hyprctl activeworkspace` shows the same workspace number that was active before unplug/open recovery.
 - `kanshictl status` shows `laptop`.
 
 ## HDMI Mirror Presentation
@@ -108,7 +111,7 @@ Use this for meetings and presentations where the laptop display should be mirro
 | Kanshi profile | `mirror` |
 | Internal display | `eDP-1` enabled at preferred mode at `0x0` |
 | HDMI display | `HDMI-A-1` enabled at `1920x1080@60Hz`, mirrored from `eDP-1` |
-| Workspaces | Remain on the mirrored laptop display |
+| Workspaces | Workspaces `1`, `2`, `3`, and the active workspace remain on mirrored `eDP-1` |
 | Lid close | Not the primary presentation use case; keep lid open while presenting |
 | Audio | Prefer external USB/Bluetooth device; otherwise internal speaker/headphones or available HDMI sink |
 
@@ -116,6 +119,8 @@ Verification:
 
 ```bash
 hyprctl monitors
+hyprctl workspaces
+hyprctl workspacerules
 kanshictl status
 ```
 

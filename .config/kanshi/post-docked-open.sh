@@ -28,23 +28,16 @@ while [ "$i" -lt 30 ]; do
 done
 
 hyprctl keyword workspace "1,monitor:$EXTERNAL" >/dev/null 2>&1 || true
-hyprctl keyword workspace "2,monitor:$INTERNAL" >/dev/null 2>&1 || true
+hyprctl keyword workspace "2,monitor:$EXTERNAL" >/dev/null 2>&1 || true
+hyprctl keyword workspace "3,monitor:$INTERNAL,persistent:true" >/dev/null 2>&1 || true
 
 hyprctl dispatch moveworkspacetomonitor 1 "$EXTERNAL" >/dev/null 2>&1 || true
-hyprctl dispatch moveworkspacetomonitor 2 "$INTERNAL" >/dev/null 2>&1 || true
+hyprctl dispatch moveworkspacetomonitor 2 "$EXTERNAL" >/dev/null 2>&1 || true
+hyprctl dispatch moveworkspacetomonitor 3 "$INTERNAL" >/dev/null 2>&1 || true
 
-case "$current_ws" in
-  1)
-    hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-    hyprctl dispatch workspace 1 >/dev/null 2>&1 || true
-    ;;
-  2)
-    hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-    ;;
-  *)
-    hyprctl dispatch workspace 2 >/dev/null 2>&1 || true
-    ;;
-esac
+if [ -n "$current_ws" ]; then
+  hyprctl dispatch workspace "$current_ws" >/dev/null 2>&1 || true
+fi
 
 ~/.config/kanshi/audio-route.sh >/dev/null 2>&1 || true
 reload_waybar
