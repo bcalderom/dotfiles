@@ -6,12 +6,10 @@ SCRIPTS_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 command_dirs=(
   brother/install-brother-t720dw
-  desktop/hypr-lid-deploy
   desktop/onn
   desktop/screenshot
   disk/topdisk
   keyboard/kanata-deploy
-  network/netbird-audit
   network/sdns
   obs/setup-obs
   packages/yay-cleaner
@@ -23,9 +21,7 @@ command_dirs=(
 )
 
 bin_links=(
-  hypr-lid-deploy.sh
   kanata-deploy.sh
-  netbird-audit.sh
   onn
   path
   psvc
