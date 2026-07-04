@@ -33,16 +33,16 @@ machine.
 
 ## OBS setup script
 
-Use the OBS helper script in `scripts/obs/setup-obs.sh` to verify/install the
+Use the OBS helper script in `scripts/obs/setup-obs/setup-obs.sh` to verify/install the
 minimum requirements for screen capture, audio capture, and webcam on Arch Linux.
 
 ```bash
-bash scripts/obs/setup-obs.sh
+bash scripts/obs/setup-obs/setup-obs.sh
 ```
 
 Useful flags:
 
 ```bash
-bash scripts/obs/setup-obs.sh --check-only
-bash scripts/obs/setup-obs.sh --dry-run
+bash scripts/obs/setup-obs/setup-obs.sh --check-only
+bash scripts/obs/setup-obs/setup-obs.sh --dry-run
 ```
