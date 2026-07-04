@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+# sdns.sh
+#
+# Temporarily switch systemd-resolved DNS to a specific server.
+# Verifies quickly & silently; if verification fails, reverts to the previous/default.
+#
+# Usage:
+#   ./sdns.sh [dns] [iface]         # set static DNS (default)
+#   ./sdns.sh                       # uses DEFAULT_DNS_IP and DEFAULT_IFACE (or prompts)
+#   ./sdns.sh 1.1.1.1               # DNS via arg, IFACE via DEFAULT_IFACE or prompt
+#   IFACE=wlan0 ./sdns.sh 1.1.1.1   # interface via env
+#   ./sdns.sh 1.1.1.1 wlan0         # DNS + IFACE via args
+#
+#   ./sdns.sh dhcp|auto [iface]     # switch back to DHCP-provided DNS (resolvectl revert)
+#   ./sdns.sh dhcp wlan0
+#
+#   ./sdns.sh back|restore [iface]  # restore previously saved DNS from /run/...state
+#   ./sdns.sh back wlan0
+#
+# Exit codes:
+#   0 = switched & verified OK (kept)
+#   1 = verification failed; reverted
+#   2+ = input/environment error
+#
+# Notes:
+# - The script uses /run/dns-switch-temporary.${IFACE}.state to save previous DNS settings
+# - For dhcp/auto mode, it saves the current DNS settings before switching to DHCP
+# - For back/restore mode, it restores the saved DNS settings
+# - The script requires root privileges to modify DNS settings
+
+set -euo pipefail
+
+############################
+# USER-SET DEFAULTS HERE   #
+############################
+DEFAULT_DNS_IP="192.168.1.199"
+DEFAULT_IFACE="wlan0" # e.g. "wlan0" or "enp3s0" (leave empty to auto-detect / prompt)
+
+############################
+# OPTIONAL TUNABLES        #
+############################
+TIMEOUT_MS="${TIMEOUT_MS:-1000}" # verification budget in milliseconds
+TEST_NAME="${TEST_NAME:-archlinux.org}"
+TEST_QTYPE="${TEST_QTYPE:-A}" # A / AAAA etc.
+
+MODE="static"
+DNS_IP="${DEFAULT_DNS_IP}"
+IFACE_ARG=""
+
+# Params:
+#   [dns] [iface]         -> set static DNS (default)
+#   dhcp|auto [iface]     -> switch to DHCP-provided DNS (resolvectl revert)
+#   back|restore [iface]  -> restore previously saved DNS from state file
+case "${1:-}" in
+  dhcp|auto)
+    MODE="dhcp"
+    IFACE_ARG="${2:-}"
+    ;;
+  back|restore)
+    MODE="restore"
+    IFACE_ARG="${2:-}"
+    ;;
+  "")
+    DNS_IP="${DEFAULT_DNS_IP}"
+    IFACE_ARG=""
+    ;;
+  *)
+    DNS_IP="${1:-${DEFAULT_DNS_IP}}"
+    IFACE_ARG="${2:-}"
+    ;;
+esac
+
+# IFACE precedence: arg > env IFACE > DEFAULT_IFACE > auto/prompt
+IFACE="${IFACE_ARG:-${IFACE:-${DEFAULT_IFACE}}}"
+
+need_bin() { command -v "$1" >/dev/null 2>&1; }
+
+# Required binaries
+for b in resolvectl ip awk sed grep systemctl; do
+  need_bin "$b" || exit 3
+done
+
+# Ensure systemd-resolved is active
+systemctl -q is-active systemd-resolved >/dev/null 2>&1 || exit 4
+
+# sudo: prompt once (cache credentials)
+# This ensures any subsequent sudo usage does not re-prompt in this run.
+sudo -v || exit 6
+
+# Keep sudo alive while we run (best effort)
+(while true; do
+  sudo -n true >/dev/null 2>&1 || exit
+  sleep 30
+done) 2>/dev/null &
+SUDO_KEEPALIVE_PID="$!"
+cleanup() { kill "$SUDO_KEEPALIVE_PID" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+
+list_default_route_ifaces() {
+  # Collect unique interfaces that have a default route (IPv4 + IPv6).
+  # Return one per line.
+  {
+    ip -4 route show default 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}'
+    ip -6 route show default 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}'
+  } | awk 'NF' | awk '!seen[$0]++'
+}
+
+choose_iface() {
+  mapfile -t ifs < <(list_default_route_ifaces)
+
+  if [[ "${#ifs[@]}" -eq 0 ]]; then
+    return 1
+  elif [[ "${#ifs[@]}" -eq 1 ]]; then
+    echo "${ifs[0]}"
+    return 0
+  else
+    # Prompt user to choose (required by your request)
+    echo "Multiple default-route interfaces detected:"
+    local i=1
+    for iface in "${ifs[@]}"; do
+      echo "  [$i] $iface"
+      ((i++))
+    done
+
+    while true; do
+      read -r -p "Choose interface (1-${#ifs[@]}): " sel
+      [[ "$sel" =~ ^[0-9]+$ ]] || continue
+      ((sel >= 1 && sel <= ${#ifs[@]})) || continue
+      echo "${ifs[$((sel - 1))]}"
+      return 0
+    done
+  fi
+}
+
+# Determine IFACE if not provided
+if [[ -z "$IFACE" ]]; then
+  IFACE="$(choose_iface)" || exit 5
+else
+  # Validate interface exists
+  ip link show "$IFACE" >/dev/null 2>&1 || exit 5
+fi
+
+if [[ "$MODE" == "static" ]]; then
+  # Simple DNS_IP sanity check (IPv4 or IPv6-ish)
+  if [[ -z "$DNS_IP" ]] || ! echo "$DNS_IP" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$|:'; then
+    exit 2
+  fi
+fi
+
+# Quick verification helper (no sudo needed)
+verify() {
+  local out rc=0
+  if [[ "$MODE" == "static" ]]; then
+    resolvectl dns "$IFACE" 2>/dev/null | grep -Fq "$DNS_IP" || return 1
+  fi
+
+  if need_bin timeout; then
+    local timeout_s
+    timeout_s="$(awk -v ms="$TIMEOUT_MS" 'BEGIN { printf "%.3f", ms/1000 }')"
+    out="$(timeout "$timeout_s" \
+      resolvectl query -i "$IFACE" --type="$TEST_QTYPE" "$TEST_NAME" \
+      2>/dev/null || rc=$?)"
+  else
+    out="$(resolvectl query -i "$IFACE" --type="$TEST_QTYPE" "$TEST_NAME" \
+      2>/dev/null || rc=$?)"
+  fi
+
+  [[ $rc -eq 0 ]] || return 1
+  echo "$out" | grep -Eiq '(^|[[:space:]])(Address|Addresses):|([0-9]{1,3}\.){3}[0-9]{1,3}|:' || return 1
+  return 0
+}
+
+# Do privileged operations in ONE sudo session (single auth)
+# - Capture old settings
+# - Apply new DNS + domain
+# - Flush caches
+# If verify fails: revert
+#
+# We DO NOT print anything unless interface selection was needed.
+if [[ "$MODE" == "restore" ]]; then
+  sudo bash -c '
+set -euo pipefail
+IFACE="$1"
+state_file="/run/dns-switch-temporary.${IFACE}.state"
+
+OLD_DNS=""
+OLD_DOMAINS=""
+if [[ -r "$state_file" ]]; then
+  # shellcheck disable=SC1090
+  source "$state_file"
+fi
+
+if [[ -z "${OLD_DNS:-}" && -z "${OLD_DOMAINS:-}" ]]; then
+  exit 7
+fi
+
+if [[ -n "${OLD_DNS:-}" ]]; then
+  read -r -a old_dns_arr <<<"$OLD_DNS"
+  resolvectl dns "$IFACE" "${old_dns_arr[@]}" >/dev/null 2>&1 || true
+fi
+
+if [[ -n "${OLD_DOMAINS:-}" ]]; then
+  read -r -a old_domains_arr <<<"$OLD_DOMAINS"
+  resolvectl domain "$IFACE" "${old_domains_arr[@]}" >/dev/null 2>&1 || true
+fi
+
+resolvectl flush-caches >/dev/null 2>&1 || true
+' bash "$IFACE"
+
+  if verify; then
+    exit 0
+  fi
+
+  exit 1
+fi
+
+if [[ "$MODE" == "dhcp" ]]; then
+  sudo bash -c '
+set -euo pipefail
+IFACE="$1"
+
+state_file="/run/dns-switch-temporary.${IFACE}.state"
+
+old_dns="$(resolvectl dns "$IFACE" 2>/dev/null | sed -E "s/^.*: *//; s/^[[:space:]]+//; s/[[:space:]]+$//" || true)"
+old_domains="$(resolvectl domain "$IFACE" 2>/dev/null | sed -E "s/^.*: *//; s/^[[:space:]]+//; s/[[:space:]]+$//" || true)"
+
+{
+  printf "OLD_DNS=%q\n" "$old_dns"
+  printf "OLD_DOMAINS=%q\n" "$old_domains"
+} > "$state_file"
+
+chmod 600 "$state_file"
+
+resolvectl revert "$IFACE" >/dev/null 2>&1 || true
+resolvectl flush-caches >/dev/null 2>&1 || true
+' bash "$IFACE"
+
+  if verify; then
+    exit 0
+  fi
+
+  sudo bash -c '
+set -euo pipefail
+IFACE="$1"
+state_file="/run/dns-switch-temporary.${IFACE}.state"
+
+OLD_DNS=""
+OLD_DOMAINS=""
+if [[ -r "$state_file" ]]; then
+  # shellcheck disable=SC1090
+  source "$state_file"
+fi
+
+if [[ -n "${OLD_DNS:-}" && -n "${OLD_DOMAINS:-}" ]]; then
+  read -r -a old_dns_arr <<<"$OLD_DNS"
+  read -r -a old_domains_arr <<<"$OLD_DOMAINS"
+  resolvectl dns "$IFACE" "${old_dns_arr[@]}" >/dev/null 2>&1 || true
+  resolvectl domain "$IFACE" "${old_domains_arr[@]}" >/dev/null 2>&1 || true
+else
+  resolvectl revert "$IFACE" >/dev/null 2>&1 || true
+fi
+
+resolvectl flush-caches >/dev/null 2>&1 || true
+' bash "$IFACE"
+
+  exit 1
+fi
+
+sudo bash -c '
+set -euo pipefail
+IFACE="$1"
+DNS_IP="$2"
+
+state_file="/run/dns-switch-temporary.${IFACE}.state"
+
+old_dns="$(resolvectl dns "$IFACE" 2>/dev/null | sed -E "s/^.*: *//; s/^[[:space:]]+//; s/[[:space:]]+$//" || true)"
+old_domains="$(resolvectl domain "$IFACE" 2>/dev/null | sed -E "s/^.*: *//; s/^[[:space:]]+//; s/[[:space:]]+$//" || true)"
+
+{
+  printf "OLD_DNS=%q\n" "$old_dns"
+  printf "OLD_DOMAINS=%q\n" "$old_domains"
+} > "$state_file"
+
+chmod 600 "$state_file"
+
+resolvectl dns "$IFACE" "$DNS_IP" >/dev/null 2>&1
+resolvectl domain "$IFACE" "~." >/dev/null 2>&1 || true
+resolvectl flush-caches >/dev/null 2>&1 || true
+' bash "$IFACE" "$DNS_IP"
+
+# Verify (silent)
+if verify; then
+  exit 0
+fi
+
+# If verification failed, revert (single sudo, should not re-prompt due to cached creds)
+sudo bash -c '
+set -euo pipefail
+IFACE="$1"
+state_file="/run/dns-switch-temporary.${IFACE}.state"
+
+OLD_DNS=""
+OLD_DOMAINS=""
+if [[ -r "$state_file" ]]; then
+  # shellcheck disable=SC1090
+  source "$state_file"
+fi
+
+if [[ -n "${OLD_DNS:-}" && -n "${OLD_DOMAINS:-}" ]]; then
+  read -r -a old_dns_arr <<<"$OLD_DNS"
+  read -r -a old_domains_arr <<<"$OLD_DOMAINS"
+  resolvectl dns "$IFACE" "${old_dns_arr[@]}" >/dev/null 2>&1 || true
+  resolvectl domain "$IFACE" "${old_domains_arr[@]}" >/dev/null 2>&1 || true
+else
+  resolvectl revert "$IFACE" >/dev/null 2>&1 || true
+fi
+
+resolvectl flush-caches >/dev/null 2>&1 || true
+' bash "$IFACE" "$DNS_IP"
+
+exit 1
