@@ -1,0 +1,1 @@
+../keyboard/kanata-deploy/kanata-deploy.sh
