@@ -73,7 +73,7 @@ Fix path:
 Expected corrected state:
 
 - `hyprctl monitors` shows `DP-1` and does not show enabled `eDP-1`.
-- `hyprctl workspaces` shows workspace `1`, `2`, and `3` on `DP-1`.
+- `hyprctl workspaces` shows existing workspace entries on `DP-1`; empty inactive workspaces may be absent.
 - `hyprctl workspacerules` shows workspace `1`, `2`, and `3` bound to `DP-1`.
 - `hyprctl activeworkspace` shows the same workspace number that was active before closing the lid.
 - `kanshictl status` shows `docked_dp_only` or `docked_dp_hdmi`.
@@ -85,6 +85,7 @@ Likely causes:
 - The lid open event fired before `DP-1` disappeared, so the laptop profile was not selected yet.
 - Kanshi switched to `laptop`, but `eDP-1` DPMS stayed off.
 - Workspaces remained logically available, but focus did not move cleanly back to `eDP-1`.
+- The backup lid watcher was not running, so unplug recovery could not read the last stable active workspace.
 
 Checks:
 
@@ -99,12 +100,13 @@ grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
 Fix path:
 
 - Run `~/.config/hypr/scripts/lid.sh open` after unplugging from `DP-1`.
+- Confirm `systemctl --user status hypr-lid.service` is active before testing unplug recovery.
 - If that works, the issue is the unplug/open race and `post-laptop.sh` should be checked because it owns profile-triggered recovery.
 
 Expected corrected state:
 
 - `hyprctl monitors` shows enabled `eDP-1` with `dpmsStatus: 1`.
-- `hyprctl workspaces` shows workspace `1`, `2`, and `3` on `eDP-1`.
+- `hyprctl workspaces` shows existing workspace entries on `eDP-1`; empty inactive workspaces may be absent.
 - `hyprctl workspacerules` shows workspace `1`, `2`, and `3` bound to `eDP-1`.
 - `hyprctl activeworkspace` shows the same workspace number that was active before unplug/open recovery.
 - `kanshictl status` shows `laptop`.
@@ -135,12 +137,12 @@ Expected corrected state:
 
 - `hyprctl monitors` shows enabled `DP-1` and `eDP-1`.
 - `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
-- `hyprctl workspaces` shows workspace `1` and `2` on `DP-1`, and workspace `3` on `eDP-1`.
-- `hyprctl workspacerules` shows workspace `1` and `2` bound to `DP-1`, and workspace `3` bound to `eDP-1`.
+- `hyprctl workspaces` shows existing `DP-1` workspaces on `DP-1`, and the next numbered workspace on `eDP-1`.
+- `hyprctl workspacerules` shows existing `DP-1` workspaces bound to `DP-1`, and the next numbered workspace bound to `eDP-1` with `persistent:false`.
 - `hyprctl activeworkspace` shows the same workspace number that was active before opening the lid.
 - `kanshictl status` shows `docked_open_dp_only` or `docked_open_dp_hdmi`.
 
-If no workspace appears on `eDP-1`, rerun `~/.config/hypr/scripts/lid.sh open`; the handler should create persistent workspace `3` on `eDP-1` without forcing focus away from the active workspace.
+If the wrong empty workspace appears on `eDP-1`, rerun `~/.config/hypr/scripts/lid.sh open`; the handler should create/bind the next numbered workspace on `eDP-1` without leaving focus there.
 
 If `hyprctl workspaces` and `hyprctl workspacerules` are correct but Waybar still shows stale workspace buttons, restart Waybar with `SUPER+W`. The lid and kanshi transition hooks already ask Hyprland to restart Waybar after docked, docked-open, and laptop transitions when Waybar is running.
 

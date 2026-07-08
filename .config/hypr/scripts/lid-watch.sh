@@ -10,9 +10,17 @@ LID_WATCH_ITERATIONS="${LID_WATCH_ITERATIONS:-}"
 LID_INTERNAL_OUTPUT="${LID_INTERNAL_OUTPUT:-eDP-1}"
 LID_EXTERNAL_OUTPUT="${LID_EXTERNAL_OUTPUT:-DP-1}"
 LID_HDMI_OUTPUT="${LID_HDMI_OUTPUT:-HDMI-A-1}"
+ACTIVE_WORKSPACE_FILE="${HYPR_LID_ACTIVE_WORKSPACE_FILE:-${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-active-workspace}"
 
-log() {
-  printf 'hypr-lid: %s\n' "$*" >&2
+log() { printf 'hypr-lid: %s\n' "$*" >&2; }
+
+active_workspace() { hyprctl activeworkspace 2>/dev/null | awk '/^workspace ID/ { print $3; exit }'; }
+
+record_active_workspace() {
+  local workspace
+  workspace="$(active_workspace)"
+  [ -n "${workspace}" ] && printf '%s\n' "${workspace}" > "${ACTIVE_WORKSPACE_FILE}"
+  return 0
 }
 
 ensure_hyprland_env() {
@@ -20,9 +28,7 @@ ensure_hyprland_env() {
 
   command -v hyprctl >/dev/null 2>&1 || return 1
 
-  if hyprctl monitors >/dev/null 2>&1; then
-    return 0
-  fi
+  if hyprctl monitors >/dev/null 2>&1; then return 0; fi
 
   instance="$(env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY hyprctl instances 2>/dev/null | awk '
     /^instance / {
@@ -126,12 +132,8 @@ profile_mismatch() {
   [ -n "${profile}" ] || return 1
 
   case "${profile}" in
-    "${expected_prefix}"*)
-      return 1
-      ;;
-    *)
-      return 0
-      ;;
+    "${expected_prefix}"*) return 1 ;;
+    *) return 0 ;;
   esac
 }
 
@@ -166,14 +168,27 @@ workspace_location_mismatch() {
   workspaces="$(hyprctl workspaces 2>/dev/null || true)"
   [ -n "${workspaces}" ] || return 1
 
-  if ! grep -q "^workspace ID ${workspace} (${workspace}) on monitor " <<< "${workspaces}"; then
-    return 1
-  fi
+  if ! grep -q "^workspace ID ${workspace} (${workspace}) on monitor " <<< "${workspaces}"; then return 1; fi
 
-  if grep -q "^workspace ID ${workspace} (${workspace}) on monitor ${monitor}:" <<< "${workspaces}"; then
-    return 1
-  fi
+  if grep -q "^workspace ID ${workspace} (${workspace}) on monitor ${monitor}:" <<< "${workspaces}"; then return 1; fi
 
+  return 0
+}
+
+next_docked_open_workspace() {
+  { printf '%s\n' 1 2; hyprctl workspaces 2>/dev/null | awk -v monitor="${LID_EXTERNAL_OUTPUT}" '
+    $1 == "workspace" && $2 == "ID" && $3 ~ /^[0-9]+$/ { workspace = $3; workspace_monitor = $7; sub(/:$/, "", workspace_monitor); candidate = workspace_monitor == monitor }
+    candidate && $1 == "windows:" && $2 > 0 { print workspace; candidate = 0 }'; } | awk 'max < $1 { max = $1 } END { print max + 1 }'
+}
+
+monitor_workspace_mismatch() {
+  local active
+
+  active="$(hyprctl monitors 2>/dev/null | awk -v monitor="$1" '
+    $1 == "Monitor" { current = $2 }
+    current == monitor && $1 == "active" && $2 == "workspace:" { print $3; exit }')"
+
+  [ "${active}" = "$2" ] && return 1
   return 0
 }
 
@@ -190,6 +205,8 @@ workspace_mismatch() {
 }
 
 needs_reconcile() {
+  local internal_workspace
+
   case "$1" in
     closed\|external:1\|internal:*)
       case "$1" in
@@ -203,6 +220,7 @@ needs_reconcile() {
       workspace_mismatch 3 "${LID_EXTERNAL_OUTPUT}" && return 0
       ;;
     open\|external:1\|internal:*)
+      internal_workspace="$(next_docked_open_workspace)"
       case "$1" in
         *\|internal:0*)
           return 0
@@ -211,7 +229,8 @@ needs_reconcile() {
       profile_mismatch docked_open_dp_ && return 0
       workspace_mismatch 1 "${LID_EXTERNAL_OUTPUT}" && return 0
       workspace_mismatch 2 "${LID_EXTERNAL_OUTPUT}" && return 0
-      workspace_mismatch 3 "${LID_INTERNAL_OUTPUT}" && return 0
+      workspace_rule_mismatch "${internal_workspace}" "${LID_INTERNAL_OUTPUT}" && return 0
+      monitor_workspace_mismatch "${LID_INTERNAL_OUTPUT}" "${internal_workspace}" && return 0
       ;;
     open\|external:0\|internal:*\|hdmi:1)
       case "$1" in
@@ -266,6 +285,8 @@ while :; do
       run_handler "${state%%|*}"
     fi
   fi
+
+  [ "${state}" != "unknown" ] && [ "${state}" = "${last_state}" ] && record_active_workspace
 
   if [ -n "${LID_WATCH_ITERATIONS}" ]; then
     iterations=$((iterations + 1))

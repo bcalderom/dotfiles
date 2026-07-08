@@ -22,7 +22,8 @@ PROFILE_STATE_PATH="${TMPDIR}/profile-state"
 RULE_STATE_PATH="${TMPDIR}/rule-state"
 HANDLER_LOG="${TMPDIR}/handler.log"
 LID_HANDLER="${TMPDIR}/lid-handler"
-export LID_STATE_PATH MONITOR_STATE_PATH PROFILE_STATE_PATH RULE_STATE_PATH HANDLER_LOG LID_HANDLER
+HYPR_LID_ACTIVE_WORKSPACE_FILE="${TMPDIR}/active-workspace"
+export LID_STATE_PATH MONITOR_STATE_PATH PROFILE_STATE_PATH RULE_STATE_PATH HANDLER_LOG LID_HANDLER HYPR_LID_ACTIVE_WORKSPACE_FILE
 
 cat > "${MOCK_BIN}/hyprctl" <<'EOF'
 #!/usr/bin/env bash
@@ -48,18 +49,27 @@ case "${1:-}" in
 
     case "$(cat "${MONITOR_STATE_PATH}")" in
       both)
+        internal_ws=3
+        if [[ "$(cat "${RULE_STATE_PATH}")" == "wrong-auto" ]]; then
+          internal_ws=4
+        fi
         printf 'Monitor DP-1 (ID 1):\n'
+        printf '\tactive workspace: 2 (2)\n'
         printf 'Monitor eDP-1 (ID 0):\n'
+        printf '\tactive workspace: %s (%s)\n' "${internal_ws}" "${internal_ws}"
         ;;
       mirror)
         printf 'Monitor eDP-1 (ID 0):\n'
+        printf '\tactive workspace: 2 (2)\n'
         printf 'Monitor HDMI-A-1 (ID 2):\n'
         ;;
       external)
         printf 'Monitor DP-1 (ID 1):\n'
+        printf '\tactive workspace: 2 (2)\n'
         ;;
       internal)
         printf 'Monitor eDP-1 (ID 0):\n'
+        printf '\tactive workspace: 2 (2)\n'
         ;;
     esac
     ;;
@@ -70,16 +80,19 @@ case "${1:-}" in
 
     case "$(cat "${RULE_STATE_PATH}")" in
       docked)
-        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"DP-1"}]\n'
+        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"DP-1","persistent":false}]\n'
         ;;
       docked-open)
-        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"eDP-1"}]\n'
+        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
+        ;;
+      wrong-auto)
+        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
         ;;
       laptop)
-        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1"}]\n'
+        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
         ;;
       mirror)
-        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1"}]\n'
+        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
         ;;
     esac
     ;;
@@ -98,6 +111,11 @@ case "${1:-}" in
         printf 'workspace ID 1 (1) on monitor DP-1:\n'
         printf 'workspace ID 2 (2) on monitor DP-1:\n'
         printf 'workspace ID 3 (3) on monitor eDP-1:\n'
+        ;;
+      wrong-auto)
+        printf 'workspace ID 1 (1) on monitor DP-1:\n'
+        printf 'workspace ID 2 (2) on monitor DP-1:\n'
+        printf 'workspace ID 4 (4) on monitor eDP-1:\n'
         ;;
       laptop)
         printf 'workspace ID 1 (1) on monitor eDP-1:\n'
@@ -237,6 +255,25 @@ wait "${watch_pid}"
 
 if [[ "$(grep -Fc 'closed external laptop laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
   echo "Expected one stable-state mismatch reconciliation" >&2
+  exit 1
+fi
+
+: > "${HANDLER_LOG}"
+printf 'state: open\n' > "${LID_STATE_PATH}"
+printf 'both\n' > "${MONITOR_STATE_PATH}"
+printf 'docked_open_dp_only\n' > "${PROFILE_STATE_PATH}"
+printf 'docked-open\n' > "${RULE_STATE_PATH}"
+
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+watch_pid="$!"
+
+sleep 0.15
+printf 'wrong-auto\n' > "${RULE_STATE_PATH}"
+
+wait "${watch_pid}"
+
+if [[ "$(grep -Fc 'open both docked_open_dp_only wrong-auto' "${HANDLER_LOG}")" -ne 1 ]]; then
+  echo "Expected one dynamic workspace reconciliation" >&2
   exit 1
 fi
 
