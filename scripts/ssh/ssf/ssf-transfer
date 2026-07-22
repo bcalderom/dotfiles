@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+
+die() { echo "Error: $*" >&2; exit 1; }
+need_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+trim_path() {
+  local value="$1"
+  value="${value#${value%%[![:space:]]*}}"
+  value="${value%${value##*[![:space:]]}}"
+  printf '%s' "$value"
+}
+
+strip_outer_quotes() {
+  local value="$1"
+  if [[ ${#value} -ge 2 ]]; then
+    if [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]] ||
+       [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+  printf '%s' "$value"
+}
+
+expand_remote_path() {
+  local path
+  path="$(strip_outer_quotes "$(trim_path "$1")")"
+  case "$path" in
+    '~'|'~/'*|/*) printf '%s' "$path" ;;
+    *) printf '~/%s' "$path" ;;
+  esac
+}
+
+resolve_local_path() {
+  local path
+  path="$(strip_outer_quotes "$(trim_path "$1")")"
+  path="${path//\\ / }"
+  case "$path" in
+    '~') path="$HOME" ;;
+    '~/'*) path="$HOME/${path:2}" ;;
+  esac
+  if [[ "$path" == /* ]]; then
+    printf '%s' "$path"
+  elif need_cmd realpath; then
+    realpath -m -- "$path" 2>/dev/null || printf '%s/%s' "$(pwd -P)" "$path"
+  else
+    printf '%s/%s' "$(pwd -P)" "$path"
+  fi
+}
+
+prompt_remote_path() {
+  local message="$1" default_value="${2:-}" input
+  while true; do
+    read -r -e -p "$message" input || return 1
+    input="$(strip_outer_quotes "$(trim_path "$input")")"
+    input="${input:-$default_value}"
+    if [[ -n "$input" ]]; then
+      expand_remote_path "$input"
+      return 0
+    fi
+    echo "Remote path is required" >&2
+  done
+}
+
+list_local_entries() {
+  local current="$1" directories_only="$2" entry tag parent
+  printf '[C] %s\0' "$current"
+  parent="$(dirname -- "$current")"
+  [[ "$parent" == "$current" ]] || printf '[U] %s\0' "$parent"
+  while IFS= read -r -d '' entry; do
+    if [[ -d "$entry" ]]; then
+      tag=D
+    elif [[ -L "$entry" ]]; then
+      tag=L
+    else
+      tag=F
+    fi
+    [[ "$directories_only" == 0 || "$tag" == D || -d "$entry" ]] || continue
+    printf '[%s] %s\0' "$tag" "$entry"
+  done < <(find "$current" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | sort -z)
+}
+
+preview_local_entry() {
+  local record="$1" path="${1:4}"
+  printf 'Selected:\n  %s\n\n' "$path"
+  if [[ "${record:0:3}" == '[U]' ]]; then
+    echo 'Parent directory'
+  elif [[ -d "$path" ]]; then
+    ls -la -- "$path" 2>/dev/null || true
+  else
+    ls -lh -- "$path" 2>/dev/null || true
+  fi
+}
+
+browse_local() {
+  local mode="$1" current="$2" tmp action record path
+  local directories_only=0 multi=(--multi) header
+  local -a result=() records=() paths=()
+  [[ "$mode" == destination ]] && directories_only=1 && multi=()
+  while true; do
+    tmp="$(mktemp)"
+    if [[ "$mode" == destination ]]; then
+      header='Enter: open directory | Ctrl-A: accept directory | Backspace: parent | Esc: cancel'
+    else
+      header='Enter: open directory/accept file | Tab: mark | Ctrl-A: accept | Backspace: parent | Esc: cancel'
+    fi
+    if ! list_local_entries "$current" "$directories_only" | FZF_DEFAULT_OPTS_FILE='' fzf \
+      --read0 --print0 "${multi[@]}" --scheme=path --layout=reverse \
+      --prompt="${mode}> " --border-label="$current" --header="$header" \
+      --expect=enter,ctrl-a,backspace \
+      --preview="bash $(printf '%q' "$SELF_PATH") --_preview {}" \
+      --preview-window=right:55%:wrap > "$tmp"; then
+      rm -f -- "$tmp"
+      return 1
+    fi
+    mapfile -d '' -t result < "$tmp"
+    rm -f -- "$tmp"
+    action="${result[0]:-}"
+    records=("${result[@]:1}")
+    if [[ "$action" == backspace ]]; then
+      current="$(dirname -- "$current")"
+      continue
+    fi
+    [[ ${#records[@]} -gt 0 ]] || continue
+    record="${records[0]}"
+    path="${record:4}"
+    if [[ "$action" == enter && ${#records[@]} -eq 1 && "${record:0:3}" != '[C]' && -d "$path" ]]; then
+      current="$(cd -- "$path" && pwd -P)"
+      continue
+    fi
+    paths=()
+    for record in "${records[@]}"; do
+      [[ "${record:0:3}" == '[U]' ]] && continue
+      path="${record:4}"
+      [[ "$mode" != destination || -d "$path" ]] || continue
+      paths+=("$path")
+    done
+    [[ ${#paths[@]} -gt 0 ]] || continue
+    [[ "$mode" != destination || ${#paths[@]} -eq 1 ]] || continue
+    printf '%s\0' "${paths[@]}"
+    return 0
+  done
+}
+
+choose_fzf_value() {
+  local prompt="$1" rows="$2" selected
+  selected="$(printf '%s\n' "$rows" | FZF_DEFAULT_OPTS_FILE='' fzf \
+    --delimiter=$'\t' --with-nth=2.. --prompt="$prompt" --layout=reverse)" || return 1
+  printf '%s' "${selected%%$'\t'*}"
+}
+
+choose_direction() {
+  choose_fzf_value 'direction> ' $'upload\tUpload: local to remote\ndownload\tDownload: remote to local'
+}
+
+choose_directory_mode() {
+  choose_fzf_value 'directory mode> ' $'directory\tCopy the directory\ncontents\tCopy only its contents'
+}
+
+print_shell_command() {
+  local arg first=1
+  for arg in "$@"; do
+    [[ $first -eq 1 ]] || printf ' '
+    printf '%q' "$arg"
+    first=0
+  done
+  printf '\n'
+}
+
+command_mode() {
+  local tool="$1" alias="$2" direction="$3" local_path="$4" remote_path="${5:-}"
+  local_path="$(resolve_local_path "$local_path")"
+  [[ -n "$remote_path" || "$direction" != upload ]] || remote_path='~'
+  [[ -n "$remote_path" ]] || die 'Missing remote path'
+  remote_path="$(expand_remote_path "$remote_path")"
+  local -a options=()
+  [[ "$tool" == scp ]] && options=(-r) || options=(-avz --progress --protect-args)
+  case "$direction" in
+    upload) print_shell_command "$tool" "${options[@]}" -- "$local_path" "${alias}:${remote_path}" ;;
+    download) print_shell_command "$tool" "${options[@]}" -- "${alias}:${remote_path}" "$local_path" ;;
+    *) die "Invalid direction: $direction" ;;
+  esac
+}
+
+run_transfer() {
+  local tool="$1" alias="$2" user="$3" host="$4" direction remote_path destination path mode
+  local -a sources=() command=() selected=()
+  need_cmd fzf || die 'fzf not found.'
+  need_cmd "$tool" || die "$tool not found."
+  direction="$(choose_direction)" || { echo 'Cancelled.'; return 0; }
+  echo "${tool^^} ${direction} for $alias ($user@$host)" >&2
+  if [[ "$direction" == upload ]]; then
+    mapfile -d '' -t sources < <(browse_local source "$(pwd -P)")
+    [[ ${#sources[@]} -gt 0 ]] || { echo 'Cancelled.'; return 0; }
+    if [[ "$tool" == rsync ]]; then
+      selected=()
+      for path in "${sources[@]}"; do
+        if [[ -d "$path" ]]; then
+          mode="$(choose_directory_mode)" || { echo 'Cancelled.'; return 0; }
+          [[ "$mode" == contents && "$path" != */ ]] && path="$path/"
+        fi
+        selected+=("$path")
+      done
+      sources=("${selected[@]}")
+    fi
+    remote_path="$(prompt_remote_path 'Remote destination path [~]: ' '~')" || { echo 'Cancelled.'; return 0; }
+    [[ "$tool" == scp ]] && command=(scp -r --) || command=(rsync -avz --progress --protect-args --)
+    command+=("${sources[@]}" "${alias}:${remote_path}")
+  else
+    remote_path="$(prompt_remote_path 'Remote source path: ')" || { echo 'Cancelled.'; return 0; }
+    mapfile -d '' -t selected < <(browse_local destination "$(pwd -P)")
+    [[ ${#selected[@]} -eq 1 ]] || { echo 'Cancelled.'; return 0; }
+    destination="${selected[0]}"
+    [[ "$tool" == scp ]] && command=(scp -r --) || command=(rsync -avz --progress --protect-args --)
+    command+=("${alias}:${remote_path}" "$destination")
+  fi
+  printf 'Running: '
+  print_shell_command "${command[@]}"
+  exec "${command[@]}"
+}
+
+main() {
+  case "${1:-}" in
+    --_preview) preview_local_entry "${2:-}" ;;
+    --_cmd) shift; command_mode "$@" ;;
+    scp|rsync) run_transfer "$@" ;;
+    *) die 'Usage: ssf-transfer scp|rsync ALIAS USER HOST' ;;
+  esac
+}
+
+main "$@"

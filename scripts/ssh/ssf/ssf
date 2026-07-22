@@ -2,32 +2,15 @@
 set -euo pipefail
 
 # ssf: user-friendly SSH launcher for ~/.ssh/config using fzf
-#
-# Features:
-# - Parses Host / HostName / User stanzas
-# - Prettified columns in fzf (aligned display)
-# - Preview pane with safe parsing (no broken quoting)
-# - Alias grouping safely shown in preview (other aliases with same HostName)
-# - Actions:
-#   Enter     -> ssh <alias>
-#   Ctrl-S    -> scp (interactive prompts)
-#   Ctrl-R    -> rsync (interactive prompts)
-#   Ctrl-T    -> tmux new-window (if inside tmux) else ssh
-#   Ctrl-P    -> ping/port test (quick connectivity)
-#   Ctrl-K    -> copy "ssh <alias>"
-#   Ctrl-U    -> copy "user@hostname"
-#   Ctrl-I    -> copy "hostname"
-#   Ctrl-E    -> open ssh config in $EDITOR
-#   Ctrl-Y    -> run remote command and copy stdout
-# - MRU sorting via history file (~/.cache/ssh-fzf-history)
-# - Optional collapsed view (one row per HostName, then pick alias)
 
 CONFIG="${HOME}/.ssh/config"
 COLLAPSED=0
 FILTER_GROUP=""
 INITIAL_QUERY=""
 
-SELF_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF_PATH")" && pwd)"
+SSF_TRANSFER_PATH="${SCRIPT_DIR}/ssf-transfer"
 
 usage() {
   cat <<'EOF'
@@ -42,8 +25,8 @@ Options:
 
 Keys (in selector):
   Enter   ssh
-  Ctrl-S  scp (upload/download)
-  Ctrl-R  rsync (upload/download)
+  Ctrl-S  scp transfer
+  Ctrl-R  rsync transfer
   Ctrl-T  tmux new-window (if inside tmux)
   Ctrl-P  ping/port test
   Ctrl-K  copy "ssh <alias>"
@@ -55,644 +38,74 @@ EOF
 }
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
-
 die() { echo "Error: $*" >&2; exit 1; }
-
 editor() { echo "${EDITOR:-vi}"; }
-
-hist_file() { echo "${XDG_CACHE_HOME:-$HOME/.cache}/ssf-history"; }
 
 ensure_deps() {
   need_cmd fzf || die "fzf not found. Install fzf first."
   need_cmd ssh || die "ssh not found."
 }
 
-# Parse ssh config into TSV:
-# alias \t hostname \t user \t group \t role \t variant
-parse_config() {
-  local cfg="$1"
-  [[ -f "$cfg" ]] || die "Config not found: $cfg"
+[[ -f "${SCRIPT_DIR}/ssf-hosts" ]] || die "Missing helper: ${SCRIPT_DIR}/ssf-hosts"
+[[ -f "${SCRIPT_DIR}/ssf-actions" ]] || die "Missing helper: ${SCRIPT_DIR}/ssf-actions"
+[[ -f "$SSF_TRANSFER_PATH" ]] || die "Missing helper: $SSF_TRANSFER_PATH"
+source "${SCRIPT_DIR}/ssf-hosts"
+source "${SCRIPT_DIR}/ssf-actions"
 
-  awk '
-    function trim(s){
-      gsub(/\r/,"",s)
-      sub(/^[ \t]+/,"",s); sub(/[ \t]+$/,"",s);
-      return s
-    }
-    function flush(aliases, hostname, user,   n, a, parts, i, grp, role, variant, j, parts2) {
-      if (aliases=="" || hostname=="" || user=="") return
-      n = split(aliases, parts, " ")
-      for (i=1; i<=n; i++) {
-        a = parts[i]
-        if (a=="" || a=="*") continue
-        n2 = split(a, parts2, "_")
-        if (n2 == 1) {
-          grp = ""
-          role = (length(parts2[1]) ? parts2[1] : "")
-        } else {
-          grp = (length(parts2[1]) ? parts2[1] : "")
-          role = (length(parts2[2]) ? parts2[2] : "")
-        }
-        variant=""
-        if (length(parts2[3])) {
-          variant=parts2[3]
-          for (j=4; j in parts2; j++) variant = variant "_" parts2[j]
-        }
-        print a "\t" hostname "\t" user "\t" grp "\t" role "\t" variant
-      }
-    }
-
-    BEGIN { aliases=""; hostname=""; user="" }
-
-    { gsub(/\r/,"",$0) }         # <-- kill CR everywhere
-
-    /^[ \t]*#/ { next }
-    /^[ \t]*$/ { next }
-
-    /^[ \t]*Host[ \t]+/ {
-      flush(aliases, hostname, user)
-      line=$0
-      sub(/^[ \t]*Host[ \t]+/,"",line)
-      line=trim(line)
-      gsub(/[ \t]+/," ",line)
-      aliases=line
-      hostname=""; user=""
-      next
-    }
-
-    /^[ \t]*HostName[ \t]+/ {
-      line=$0; sub(/^[ \t]*HostName[ \t]+/,"",line)
-      hostname=trim(line)
-      next
-    }
-
-    /^[ \t]*User[ \t]+/ {
-      line=$0; sub(/^[ \t]*User[ \t]+/,"",line)
-      user=trim(line)
-      next
-    }
-
-    END { flush(aliases, hostname, user) }
-  ' "$cfg"
-}
-
-# Sort entries by MRU history (most recent first), then alphabetically.
-sort_by_history() {
-  local hist
-  hist="$(hist_file)"
-  mkdir -p "$(dirname "$hist")" 2>/dev/null || true
-  touch "$hist" 2>/dev/null || true
-
-  awk -F'\t' -v HIST="$hist" '
-    BEGIN {
-      while ((getline line < HIST) > 0) {
-        gsub(/\r/,"",line)
-        if (line!="") order[++n]=line
-      }
-      close(HIST)
-      for (i=1; i<=n; i++) {
-        alias=order[i]
-        rank[alias]=n-i
-      }
-    }
-    {
-      a=$1
-      r = (a in rank ? rank[a] : 999999)
-      print r "\t" $0
-    }
-  ' | sort -t$'\t' -k1,1n -k2,2 | cut -f2-
-}
-
-update_history() {
-  local alias="$1"
-  local hist
-  hist="$(hist_file)"
-  mkdir -p "$(dirname "$hist")" 2>/dev/null || true
-  touch "$hist" 2>/dev/null || true
-  awk -v A="$alias" '$0!=A && $0!="" {print} END{print A}' "$hist" > "${hist}.tmp" && mv "${hist}.tmp" "$hist"
-}
-
-clipboard_copy_stdin() {
-  if need_cmd pbcopy; then
-    pbcopy
-    return 0
-  elif need_cmd wl-copy; then
-    wl-copy
-    return 0
-  elif need_cmd xclip; then
-    xclip -selection clipboard
-    return 0
-  elif need_cmd xsel; then
-    xsel --clipboard --input
-    return 0
-  fi
-  return 1
-}
-
-clipboard_copy() {
-  local text="$1"
-  printf "%s" "$text" | clipboard_copy_stdin
-}
-
-copy_remote_stdout() {
-  local alias="$1"
-  local remote_cmd="$2"
-  local tmp_out
-
-  tmp_out="$(mktemp)"
-
-  if [[ "$remote_cmd" =~ (^|[[:space:];|&()])sudo([[:space:]]|$) ]]; then
-    echo "Interactive sudo detected; enter remote password if prompted." >&2
-    if ! ssh -tt "$alias" "$remote_cmd" > "$tmp_out"; then
-      rm -f -- "$tmp_out"
-      echo "Failed to run remote command on $alias"
-      return 1
-    fi
-  elif ! ssh "$alias" "$remote_cmd" > "$tmp_out"; then
-    rm -f -- "$tmp_out"
-    echo "Failed to run remote command on $alias"
-    return 1
-  fi
-
-  if ! clipboard_copy_stdin < "$tmp_out"; then
-    rm -f -- "$tmp_out"
-    echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
-    return 1
-  fi
-
-  rm -f -- "$tmp_out"
-
-  echo "Copied stdout from remote command on $alias"
-}
-
-port_test() {
-  local host="$1"
-  if need_cmd nc; then
-    nc -z -w 2 "$host" 22 >/dev/null 2>&1 && echo "✅ TCP 22 open on $host" || echo "❌ TCP 22 closed/unreachable on $host"
-  else
-    timeout 2 bash -c ">/dev/tcp/$host/22" >/dev/null 2>&1 && echo "✅ TCP 22 open on $host" || echo "❌ TCP 22 closed/unreachable on $host"
-  fi
-}
-
-trim_path() {
-  local p="$1"
-  p="${p#${p%%[![:space:]]*}}"
-  p="${p%${p##*[![:space:]]}}"
-  printf "%s" "$p"
-}
-
-strip_matching_outer_quotes() {
-  local p="$1"
-  if [[ ${#p} -ge 2 ]]; then
-    if [[ "${p:0:1}" == "'" && "${p: -1}" == "'" ]]; then
-      p="${p:1:${#p}-2}"
-    elif [[ "${p:0:1}" == '"' && "${p: -1}" == '"' ]]; then
-      p="${p:1:${#p}-2}"
-    fi
-  fi
-  printf "%s" "$p"
-}
-
-normalize_local_input_path() {
-  local local_path="$1"
-  local_path="$(trim_path "$local_path")"
-  local_path="$(strip_matching_outer_quotes "$local_path")"
-  local_path="${local_path//\\ / }"
-  printf "%s" "$local_path"
-}
-
-expand_remote_path() {
-  local remote_path="$1"
-  remote_path="$(trim_path "$remote_path")"
-  remote_path="$(strip_matching_outer_quotes "$remote_path")"
-  if [[ "$remote_path" == "~" ]]; then
-    printf "%s" "$remote_path"
-  elif [[ "${remote_path:0:2}" == "~/" ]]; then
-    printf "%s" "$remote_path"
-  elif [[ "${remote_path:0:1}" == "/" ]]; then
-    printf "%s" "$remote_path"
-  else
-    printf "%s" "~/${remote_path}"
-  fi
-}
-
-expand_local_path() {
-  local local_path="$1"
-  local_path="$(trim_path "$local_path")"
-  if [[ "$local_path" == "~" ]]; then
-    printf "%s" "$HOME"
-  elif [[ "${local_path:0:2}" == "~/" ]]; then
-    printf "%s" "$HOME/${local_path:2}"
-  else
-    printf "%s" "$local_path"
-  fi
-}
-
-resolve_local_path() {
-  local local_path="$1"
-  local_path="$(normalize_local_input_path "$local_path")"
-  local_path="$(expand_local_path "$local_path")"
-  if [[ "$local_path" == "~" ]]; then
-    local_path="$HOME"
-  elif [[ "${local_path:0:2}" == "~/" ]]; then
-    local_path="$HOME/${local_path:2}"
-  fi
-  if [[ "$local_path" == /* ]]; then
-    printf "%s" "$local_path"
-  else
-    if need_cmd realpath; then
-      realpath -m -- "$local_path" 2>/dev/null || printf "%s" "$(pwd -P)/$local_path"
-    else
-      printf "%s" "$(pwd -P)/$local_path"
-    fi
-  fi
-}
-
-prompt_transfer_direction() {
-  local direction
-  while true; do
-    if ! read -r -p "Direction (u=upload, d=download) [u]: " direction; then
-      return 1
-    fi
-    direction="$(trim_path "${direction:-u}")"
-    case "${direction,,}" in
-      u|up|upload)
-        printf "upload"
-        return 0
-        ;;
-      d|down|download)
-        printf "download"
-        return 0
-        ;;
-      *)
-        echo "Invalid direction: ${direction}. Enter u or d."
-        ;;
-    esac
-  done
-}
-
-prompt_local_source_path() {
-  local local_input local_resolved
-  while true; do
-    if ! read -r -e -p "Local source path: " local_input; then
-      return 1
-    fi
-    local_input="$(normalize_local_input_path "$local_input")"
-    if [[ -z "$local_input" ]]; then
-      echo "Local source path is required"
-      continue
-    fi
-    local_resolved="$(resolve_local_path "$local_input")"
-    if [[ ! -e "$local_resolved" ]]; then
-      echo "Local source path does not exist: $local_resolved"
-      continue
-    fi
-    printf "%s" "$local_resolved"
-    return 0
-  done
-}
-
-prompt_remote_path() {
-  local prompt_text="$1"
-  local default_value="${2:-}"
-  local remote_input
-  while true; do
-    if ! read -r -e -p "$prompt_text" remote_input; then
-      return 1
-    fi
-    remote_input="$(trim_path "$remote_input")"
-    remote_input="$(strip_matching_outer_quotes "$remote_input")"
-    if [[ -z "$remote_input" ]]; then
-      if [[ -n "$default_value" ]]; then
-        remote_input="$default_value"
-      else
-        echo "Remote path is required"
-        continue
-      fi
-    fi
-    printf "%s" "$(expand_remote_path "$remote_input")"
-    return 0
-  done
-}
-
-prompt_local_destination_path() {
-  local default_value="${1:-.}"
-  local local_input
-  if ! read -r -e -p "Local destination path [.]: " local_input; then
-    return 1
-  fi
-  local_input="$(trim_path "$local_input")"
-  local_input="${local_input:-$default_value}"
-  printf "%s" "$(resolve_local_path "$local_input")"
-}
-
-print_shell_escaped_cmd() {
-  local -a args=("$@")
-  local i
-  for i in "${!args[@]}"; do
-    if [[ "$i" -eq 0 ]]; then
-      printf "%q" "${args[$i]}"
-    else
-      printf " %q" "${args[$i]}"
-    fi
-  done
-  printf "\n"
-}
-
-# Internal dump mode: base TSV without display formatting
-dump_mode() {
-  local cfg="$1"
-  parse_config "$cfg" | sort_by_history
-}
-
-# Build prettified display while keeping raw fields:
-# display \t alias \t hostname \t user \t group \t role \t variant
-build_display_rows() {
-  awk -F$'\t' '
-    function resolve_ip(host,   cmd, line, parts, ip) {
-      if (host in ip_cache) return ip_cache[host]
-      ip="-"
-      cmd = "getent ahosts \"" host "\" 2>/dev/null"
-      if ((cmd | getline line) > 0) {
-        split(line, parts, /[ \t]+/)
-        if (parts[1] != "") ip = parts[1]
-      }
-      close(cmd)
-      ip_cache[host]=ip
-      return ip
-    }
-    BEGIN {
-      client_w=12; server_w=14; ip_w=16; var_w=12;
-
-      header = sprintf("%-*s  %-*s  %-*s  %-*s",
-                       client_w, "Client",
-                       server_w, "Server",
-                       ip_w, "IP Address",
-                       var_w, "User")
-      print header
-    }
-    {
-      alias=$1; host=$2; user=$3; client=$4; server=$5; variant=$6;
-      if (variant=="") variant="-";
-
-      ip = resolve_ip(host)
-
-      display = sprintf("%-*s  %-*s  %-*s  %-*s",
-                        client_w, client,
-                        server_w, server,
-                        ip_w, ip,
-                        var_w, user)
-
-      # Keep raw fields for actions/preview
-      print display "\t" alias "\t" host "\t" user "\t" client "\t" server "\t" variant
-    }
-  '
-}
-
-# Safe preview: parse fields from the selected row (display + raw fields),
-# then list other aliases sharing the same HostName (via --_dump) using bash loops (no awk quoting traps).
-preview_cmd() {
-  local cfg="$1"
-  local self="$SELF_PATH"
-  cat <<EOF
-bash -c '
-  IFS=\$'\''\t'\'' read -r display alias host user client server variant <<< "\$1"
-
-  ip="-"
-  if ip_line="\$(getent ahosts "\$host" 2>/dev/null | head -n1)" && [[ -n "\$ip_line" ]]; then
-    ip="\${ip_line%%[[:space:]]*}"
-  fi
-
-  echo "Client:     \$client"
-  echo "Server:     \$server"
-  echo "IP Address: \$ip"
-  echo "User:       \$user"
-  echo
-  echo "SSH alias:"
-  echo "  \$alias"
-  echo "Command:"
-  echo "  ssh \$alias"
-  echo
-
-  echo "Other aliases on same HostName:"
-  found=0
-  while IFS=\$'\''\t'\'' read -r a h u g r v; do
-    [[ "\$h" == "\$host" ]] || continue
-    [[ "\$a" == "\$alias" ]] && continue
-    printf "  - %s (%s)\\n" "\$a" "\$u"
-    found=1
-  done < <("\$self" --_dump "$cfg" 2>/dev/null || true)
-
-  [[ "\$found" -eq 1 ]] || echo "  (none)"
-' _ "{}" "$cfg" "$self"
-EOF
-}
-
-collapsed_view() {
-  # Input: base TSV (alias host user grp role variant)
-  # Output: host \t users \t groups \t roles \t aliases
-  awk -F'\t' '
-    function adduniq(map, key, val,   k) {
-      k=key SUBSEP val
-      if (!(k in seen)) { seen[k]=1; map[key] = map[key] (map[key]=="" ? "" : ", ") val }
-      return map[key]
-    }
-    {
-      host=$2; user=$3; grp=$4; role=$5; alias=$1
-      users[host]=adduniq(users, host, user)
-      grps[host]=adduniq(grps, host, grp)
-      roles[host]=adduniq(roles, host, role)
-      aliases[host]=aliases[host] (aliases[host]=="" ? "" : ", ") alias
-    }
-    END {
-      for (h in aliases) {
-        printf "%s\t%s\t%s\t%s\t%s\n", h, users[h], grps[h], roles[h], aliases[h]
-      }
-    }
-  ' | sort
-}
-
-pick_alias_for_host() {
-  local host="$1"
-  local cfg="$2"
-  local list sel
-  list="$(dump_mode "$cfg" | awk -F$'\t' -v H="$host" '$2==H{print}')"
-  [[ -n "$list" ]] || return 1
-
-  # Build display rows for this host subset
-  sel="$(printf "%s\n" "$list" | build_display_rows | fzf \
-    --prompt="Alias for ${host}> " \
-    --delimiter=$'\t' \
-    --with-nth=1 \
-    --header-lines=1 \
-    --preview="$(preview_cmd "$cfg")" \
-    --preview-window=right:60%:wrap \
-  )" || return 1
-
-  printf "%s" "$sel"
-}
-
-run_action() {
-  local action="$1"
-  local alias="$2"
-  local host="$3"
-  local user="$4"
-  local cfg="$5"
-
-  update_history "$alias"
-
-  case "$action" in
-    enter|"")
-      exec ssh "$alias"
-      ;;
-    ctrl-t)
-      if [[ -n "${TMUX:-}" ]] && need_cmd tmux; then
-        tmux new-window -n "$alias" "ssh $alias"
-        exit 0
-      else
-        exec ssh "$alias"
-      fi
-      ;;
-    ctrl-k)
-      if clipboard_copy "ssh $alias"; then
-        echo "Copied: ssh $alias"
-      else
-        echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
-      fi
-      ;;
-    ctrl-u)
-      if clipboard_copy "${user}@${host}"; then
-        echo "Copied: ${user}@${host}"
-      else
-        echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
-      fi
-      ;;
-    ctrl-i)
-      if clipboard_copy "${host}"; then
-        echo "Copied: ${host}"
-      else
-        echo "No clipboard utility found (pbcopy/wl-copy/xclip/xsel)."
-      fi
-      ;;
-    ctrl-e)
-      exec "$(editor)" "$cfg"
-      ;;
-    ctrl-y)
-      local remote_cmd
-      read -r -p "Remote command to run and copy stdout: " remote_cmd
-      [[ -n "$remote_cmd" ]] || die "Remote command is required"
+internal_mode() {
+  local mode="$1"
+  shift
+  case "$mode" in
+    --_dump) dump_mode "${1:-$CONFIG}" ;;
+    --_rows) dump_mode "${1:-$CONFIG}" | build_display_rows ;;
+    --_scp_cmd) bash "$SSF_TRANSFER_PATH" --_cmd scp "$@" ;;
+    --_rsync_cmd) bash "$SSF_TRANSFER_PATH" --_cmd rsync "$@" ;;
+    --_copy_remote_stdout)
+      local alias="${1:-}" remote_cmd="${2:-}"
+      [[ -n "$alias" ]] || die "Missing alias"
+      [[ -n "$remote_cmd" ]] || die "Missing remote command"
       copy_remote_stdout "$alias" "$remote_cmd"
       ;;
-    ctrl-p)
-      port_test "$host"
-      ;;
-    ctrl-s)
-      echo "SCP mode for $alias ($user@$host)"
-      direction="$(prompt_transfer_direction)" || { echo "Cancelled."; return 0; }
-      case "$direction" in
-        upload)
-          local_path="$(prompt_local_source_path)" || { echo "Cancelled."; return 0; }
-          remote_path="$(prompt_remote_path "Remote destination path (absolute or relative to ~) [~]: " "~")" || { echo "Cancelled."; return 0; }
-          exec scp -r -- "$local_path" "${alias}:${remote_path}"
-          ;;
-        download)
-          remote_path="$(prompt_remote_path "Remote source path (absolute or relative to ~): ")" || { echo "Cancelled."; return 0; }
-          local_path="$(prompt_local_destination_path ".")" || { echo "Cancelled."; return 0; }
-          exec scp -r -- "${alias}:${remote_path}" "$local_path"
-          ;;
-      esac
-      ;;
-    ctrl-r)
-      echo "RSYNC mode for $alias ($user@$host)"
-      direction="$(prompt_transfer_direction)" || { echo "Cancelled."; return 0; }
-      case "$direction" in
-        upload)
-          local_path="$(prompt_local_source_path)" || { echo "Cancelled."; return 0; }
-          remote_path="$(prompt_remote_path "Remote destination path (absolute or relative to ~) [~]: " "~")" || { echo "Cancelled."; return 0; }
-          exec rsync -avz --progress -- "$local_path" "${alias}:${remote_path}"
-          ;;
-        download)
-          remote_path="$(prompt_remote_path "Remote source path (absolute or relative to ~): ")" || { echo "Cancelled."; return 0; }
-          local_path="$(prompt_local_destination_path ".")" || { echo "Cancelled."; return 0; }
-          exec rsync -avz --progress -- "${alias}:${remote_path}" "$local_path"
-          ;;
-      esac
-      ;;
-    *)
-      die "Unknown action: $action"
-      ;;
+    *) return 1 ;;
   esac
 }
 
+select_collapsed_host() {
+  local base="$1" collapsed selection
+  collapsed="$(printf '%s\n' "$base" | collapsed_view)"
+  selection="$(printf '%s\n' "$collapsed" | fzf \
+    --prompt="HostName> " --query="$INITIAL_QUERY" --delimiter=$'\t' --with-nth=1,2,3,4 \
+    --preview='bash -c '\''
+      IFS=$'\''\t'\'' read -r host users groups roles aliases <<< "$1"
+      printf "HostName: %s\nUsers:    %s\nGroups:   %s\nRoles:    %s\n\nAliases:\n" "$host" "$users" "$groups" "$roles"
+      printf "%s\n" "$aliases" | tr "," "\n" | sed "s/^/  - /"
+    '\'' _ "{}"' --preview-window=right:60%:wrap)" || return 1
+  printf '%s' "${selection%%$'\t'*}"
+}
+
+select_action() {
+  local data="$1" selection key line sep header
+  sep="$(printf '%*s' "${COLUMNS:-80}" '' | tr ' ' '-')"
+  header="${sep}"$'\n'"Enter: ssh | Ctrl-S: scp | Ctrl-R: rsync | Ctrl-T: tmux"$'\n'"Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host"$'\n'"Ctrl-I: copy host | Ctrl-E: edit | Ctrl-Y: copy cmd stdout"
+  selection="$(printf '%s\n' "$data" | fzf \
+    --prompt="SSH> " --query="$INITIAL_QUERY" --delimiter=$'\t' --with-nth=1 --header-lines=1 \
+    --expect=enter,ctrl-s,ctrl-r,ctrl-t,ctrl-p,ctrl-k,ctrl-u,ctrl-i,ctrl-e,ctrl-y \
+    --preview="$(preview_cmd "$CONFIG")" --preview-window=right:60%:wrap --header="$header")" || return 1
+  key="${selection%%$'\n'*}"
+  line="${selection#*$'\n'}"
+  [[ "$line" != "$selection" && -n "$line" ]] || return 1
+  printf '%s\n%s' "$key" "$line"
+}
+
 main() {
-  # Hidden/internal option for preview helper
-  if [[ "${1:-}" == "--_dump" ]]; then
+  if [[ "${1:-}" == --_* ]]; then
+    local mode="$1"
     shift
-    dump_mode "${1:-$CONFIG}"
-    exit 0
-  fi
-
-  # Hidden/internal option for testing: emit the scp command as a shell-escaped string
-  if [[ "${1:-}" == "--_scp_cmd" ]]; then
-    shift
-    local alias="${1:-}" direction="${2:-}" local_path="${3:-}" remote_path="${4:-}"
-    [[ -n "$alias" ]] || die "Missing alias"
-    [[ -n "$direction" ]] || die "Missing direction (upload/download)"
-    [[ -n "$local_path" ]] || die "Missing local path"
-    local_path="$(resolve_local_path "$local_path")"
-    if [[ -z "$remote_path" && "${direction,,}" =~ ^(u|up|upload)$ ]]; then
-      remote_path="~"
-    fi
-    [[ -n "$remote_path" ]] || die "Missing remote path"
-    remote_path="$(expand_remote_path "$remote_path")"
-    case "${direction,,}" in
-      u|up|upload) print_shell_escaped_cmd scp -r -- "$local_path" "${alias}:${remote_path}" ;;
-      d|down|download) print_shell_escaped_cmd scp -r -- "${alias}:${remote_path}" "$local_path" ;;
-      *) die "Invalid direction: $direction" ;;
-    esac
-    exit 0
-  fi
-
-  # Hidden/internal option for testing: emit the rsync command as a shell-escaped string
-  if [[ "${1:-}" == "--_rsync_cmd" ]]; then
-    shift
-    local alias="${1:-}" direction="${2:-}" local_path="${3:-}" remote_path="${4:-}"
-    [[ -n "$alias" ]] || die "Missing alias"
-    [[ -n "$direction" ]] || die "Missing direction (upload/download)"
-    [[ -n "$local_path" ]] || die "Missing local path"
-    local_path="$(resolve_local_path "$local_path")"
-    if [[ -z "$remote_path" && "${direction,,}" =~ ^(u|up|upload)$ ]]; then
-      remote_path="~"
-    fi
-    [[ -n "$remote_path" ]] || die "Missing remote path"
-    remote_path="$(expand_remote_path "$remote_path")"
-    case "${direction,,}" in
-      u|up|upload) print_shell_escaped_cmd rsync -avz --progress -- "$local_path" "${alias}:${remote_path}" ;;
-      d|down|download) print_shell_escaped_cmd rsync -avz --progress -- "${alias}:${remote_path}" "$local_path" ;;
-      *) die "Invalid direction: $direction" ;;
-    esac
-    exit 0
-  fi
-
-  # Hidden/internal option for testing: emit rows as shown in fzf
-  if [[ "${1:-}" == "--_rows" ]]; then
-    shift
-    dump_mode "${1:-$CONFIG}" | build_display_rows
-    exit 0
-  fi
-
-  # Hidden/internal option for testing: run remote command and copy stdout
-  if [[ "${1:-}" == "--_copy_remote_stdout" ]]; then
-    shift
-    local alias="${1:-}" remote_cmd="${2:-}"
-    [[ -n "$alias" ]] || die "Missing alias"
-    [[ -n "$remote_cmd" ]] || die "Missing remote command"
-    copy_remote_stdout "$alias" "$remote_cmd"
+    internal_mode "$mode" "$@" || die "Unknown internal option: $mode"
     exit 0
   fi
 
   ensure_deps
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -c|--config) CONFIG="${2:-}"; shift 2 ;;
@@ -701,74 +114,29 @@ main() {
       -q|--query) INITIAL_QUERY="${2:-}"; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       --) shift; break ;;
-      -*)
-        die "Unknown option: $1"
-        ;;
-      *)
-        exec ssh "$1"
-        ;;
+      -*) die "Unknown option: $1" ;;
+      *) exec ssh "$1" ;;
     esac
   done
 
-  local base data
+  local base data host action line display alias user group role variant result
   base="$(dump_mode "$CONFIG")"
-
   if [[ -n "$FILTER_GROUP" ]]; then
-    base="$(printf "%s\n" "$base" | awk -F$'\t' -v G="$FILTER_GROUP" '$4==G{print}')"
+    base="$(printf '%s\n' "$base" | awk -F$'\t' -v G="$FILTER_GROUP" '$4==G{print}')"
   fi
-
   [[ -n "$base" ]] || die "No SSH hosts found (check config: $CONFIG)"
 
   if [[ "$COLLAPSED" -eq 1 ]]; then
-    # host \t users \t groups \t roles \t aliases
-    local collapsed sel host
-    collapsed="$(printf "%s\n" "$base" | collapsed_view)"
-    sel="$(printf "%s\n" "$collapsed" | fzf \
-      --prompt="HostName> " \
-      --query="$INITIAL_QUERY" \
-      --delimiter=$'\t' \
-      --with-nth=1,2,3,4 \
-      --preview='bash -c '"'"'
-        IFS=$"\t" read -r host users grps roles aliases <<< "$1"
-        echo "HostName: $host"
-        echo "Users:    $users"
-        echo "Groups:   $grps"
-        echo "Roles:    $roles"
-        echo
-        echo "Aliases:"
-        printf "%s\n" "$aliases" | tr "," "\n" | sed "s/^/  - /"
-      '"'"' _ "{}"' \
-      --preview-window=right:60%:wrap \
-    )" || exit 0
-
-    host="$(printf "%s" "$sel" | cut -f1)"
+    host="$(select_collapsed_host "$base")" || exit 0
     data="$(pick_alias_for_host "$host" "$CONFIG")" || exit 0
   else
-    data="$(printf "%s\n" "$base" | build_display_rows)"
+    data="$(printf '%s\n' "$base" | build_display_rows)"
   fi
 
-  local selection keys line action display alias host user grp role variant sep fzf_header
-
-  sep="$(printf '%*s' "${COLUMNS:-80}" '' | tr ' ' '-')"
-  fzf_header="${sep}"$'\n'"Enter: ssh | Ctrl-S: scp (upload/download) | Ctrl-R: rsync (upload/download) | Ctrl-T: tmux"$'\n'"Ctrl-P: test | Ctrl-K: copy ssh | Ctrl-U: copy user@host"$'\n'"Ctrl-I: copy host | Ctrl-E: edit | Ctrl-Y: copy cmd stdout"
-  selection="$(printf "%s\n" "$data" | fzf \
-    --prompt="SSH> " \
-    --query="$INITIAL_QUERY" \
-    --delimiter=$'\t' \
-    --with-nth=1 \
-    --header-lines=1 \
-    --expect=enter,ctrl-s,ctrl-r,ctrl-t,ctrl-p,ctrl-k,ctrl-u,ctrl-i,ctrl-e,ctrl-y \
-    --preview="$(preview_cmd "$CONFIG")" \
-    --preview-window=right:60%:wrap \
-    --header="$fzf_header" \
-  )" || exit 0
-
-  keys="$(printf "%s\n" "$selection" | sed -n '1p')"
-  line="$(printf "%s\n" "$selection" | sed -n '2p')"
-
-  action="$keys"
-
-  IFS=$'\t' read -r display alias host user grp role variant <<< "$line"
+  result="$(select_action "$data")" || exit 0
+  action="${result%%$'\n'*}"
+  line="${result#*$'\n'}"
+  IFS=$'\t' read -r display alias host user group role variant <<< "$line"
   run_action "$action" "$alias" "$host" "$user" "$CONFIG"
 }
 

@@ -1,0 +1,69 @@
+# Actions launched from the ssf host selector.
+
+clipboard_copy_stdin() {
+  if need_cmd pbcopy; then pbcopy
+  elif need_cmd wl-copy; then wl-copy
+  elif need_cmd xclip; then xclip -selection clipboard
+  elif need_cmd xsel; then xsel --clipboard --input
+  else return 1
+  fi
+}
+
+clipboard_copy() { printf '%s' "$1" | clipboard_copy_stdin; }
+
+copy_remote_stdout() {
+  local alias="$1" remote_cmd="$2" tmp_out
+  tmp_out="$(mktemp)"
+  if [[ "$remote_cmd" =~ (^|[[:space:];|&()])sudo([[:space:]]|$) ]]; then
+    echo "Interactive sudo detected; enter remote password if prompted." >&2
+    if ! ssh -tt "$alias" "$remote_cmd" > "$tmp_out"; then rm -f -- "$tmp_out"; echo "Failed to run remote command on $alias"; return 1; fi
+  elif ! ssh "$alias" "$remote_cmd" > "$tmp_out"; then
+    rm -f -- "$tmp_out"; echo "Failed to run remote command on $alias"; return 1
+  fi
+  if ! clipboard_copy_stdin < "$tmp_out"; then
+    rm -f -- "$tmp_out"; echo 'No clipboard utility found (pbcopy/wl-copy/xclip/xsel).'; return 1
+  fi
+  rm -f -- "$tmp_out"
+  echo "Copied stdout from remote command on $alias"
+}
+
+port_test() {
+  local host="$1"
+  if need_cmd nc; then
+    nc -z -w 2 "$host" 22 >/dev/null 2>&1 && echo "TCP 22 open on $host" || echo "TCP 22 closed/unreachable on $host"
+  else
+    timeout 2 bash -c ">/dev/tcp/$host/22" >/dev/null 2>&1 && echo "TCP 22 open on $host" || echo "TCP 22 closed/unreachable on $host"
+  fi
+}
+
+run_action() {
+  local action="$1" alias="$2" host="$3" user="$4" cfg="$5" remote_cmd
+  update_history "$alias"
+  case "$action" in
+    enter|'') exec ssh "$alias" ;;
+    ctrl-t)
+      if [[ -n "${TMUX:-}" ]] && need_cmd tmux; then tmux new-window -n "$alias" "ssh $alias"
+      else exec ssh "$alias"
+      fi
+      ;;
+    ctrl-k)
+      clipboard_copy "ssh $alias" && echo "Copied: ssh $alias" || echo 'No clipboard utility found (pbcopy/wl-copy/xclip/xsel).'
+      ;;
+    ctrl-u)
+      clipboard_copy "${user}@${host}" && echo "Copied: ${user}@${host}" || echo 'No clipboard utility found (pbcopy/wl-copy/xclip/xsel).'
+      ;;
+    ctrl-i)
+      clipboard_copy "$host" && echo "Copied: $host" || echo 'No clipboard utility found (pbcopy/wl-copy/xclip/xsel).'
+      ;;
+    ctrl-e) exec "$(editor)" "$cfg" ;;
+    ctrl-y)
+      read -r -p 'Remote command to run and copy stdout: ' remote_cmd
+      [[ -n "$remote_cmd" ]] || die 'Remote command is required'
+      copy_remote_stdout "$alias" "$remote_cmd"
+      ;;
+    ctrl-p) port_test "$host" ;;
+    ctrl-s) exec bash "$SSF_TRANSFER_PATH" scp "$alias" "$user" "$host" ;;
+    ctrl-r) exec bash "$SSF_TRANSFER_PATH" rsync "$alias" "$user" "$host" ;;
+    *) die "Unknown action: $action" ;;
+  esac
+}

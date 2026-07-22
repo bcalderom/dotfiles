@@ -57,7 +57,7 @@ for link in "${bin_links[@]}"; do
   fi
 done
 
-for internal in psvc-doctor psvc-print; do
+for internal in psvc-doctor psvc-print ssf-hosts ssf-actions ssf-transfer; do
   if [[ -e "${SCRIPTS_DIR}/bin/${internal}" ]]; then
     echo "Internal helper should not be public: scripts/bin/${internal}" >&2
     exit 1
