@@ -1,54 +1,32 @@
 # Runbook
 
-Use this when checking or recovering the display setup.
+Use this to inspect or recover the display setup.
 
 ## Inspect Current State
 
 ```bash
+systemctl --user status hypr-lid.service
+journalctl --user -u hypr-lid.service -b
 hyprctl monitors
 hyprctl workspaces
 hyprctl workspacerules
 hyprctl activeworkspace
-kanshictl status
-pactl info
 ```
 
-## Reload Display Profiles
+The journal should show one `hypr-lid: handling ...` entry per stable transition. Repeated alternating entries indicate connector instability.
+
+## Restart The Coordinator
 
 ```bash
-kanshictl reload
+systemctl --user restart hypr-lid.service
+systemctl --user status hypr-lid.service
 ```
 
-If `kanshictl` is unavailable, restart kanshi from the Hyprland session.
+Do not start `kanshi`; it would create a second output owner.
 
-```bash
-pkill kanshi
-kanshi &
-```
+## Manual Reconciliation
 
-## Re-run Profile Hooks Manually
-
-Docked:
-
-```bash
-~/.config/kanshi/post-docked.sh
-```
-
-Laptop-only:
-
-```bash
-~/.config/kanshi/post-laptop.sh
-```
-
-HDMI mirror:
-
-```bash
-~/.config/kanshi/post-mirror.sh
-```
-
-## Re-run Lid Handling
-
-Auto-detect current lid state:
+Auto-detect lid state:
 
 ```bash
 ~/.config/hypr/scripts/lid.sh
@@ -60,16 +38,7 @@ Force closed-lid correction:
 ~/.config/hypr/scripts/lid.sh closed
 ```
 
-Validate closed-lid correction:
-
-```bash
-hyprctl monitors
-hyprctl workspaces
-hyprctl workspacerules
-kanshictl status
-```
-
-Expected result: only `DP-1` is enabled, workspace rules bind existing workspaces to `DP-1`, the previously active workspace remains active, and kanshi reports `docked_dp_only` or `docked_dp_hdmi`.
+Expected with `DP-1` connected: workspaces are on `DP-1`, focus is preserved, and `eDP-1` is disabled only after the move.
 
 Force open-lid correction:
 
@@ -77,81 +46,51 @@ Force open-lid correction:
 ~/.config/hypr/scripts/lid.sh open
 ```
 
-Validate docked open-lid correction:
+Expected with `DP-1` connected: both outputs are enabled, existing external workspaces stay on `DP-1`, and the next numbered workspace is on `eDP-1`.
+
+Expected without `DP-1`: `eDP-1` is enabled with DPMS on and existing workspaces return to it. If HDMI is connected, `HDMI-A-1` mirrors `eDP-1`.
+
+## Validate A Correction
 
 ```bash
 hyprctl monitors
 hyprctl workspaces
 hyprctl workspacerules
-kanshictl status
+hyprctl activeworkspace
 ```
 
-Expected result when `DP-1` is present: both `DP-1` and `eDP-1` are enabled, `eDP-1` has `dpmsStatus: 1`, existing `DP-1` workspaces remain on `DP-1`, the next numbered workspace is bound to `eDP-1`, workspace rules match that split, the previously active workspace remains active, and kanshi reports `docked_open_dp_only` or `docked_open_dp_hdmi`.
-
-Validate open-lid/unplug correction:
-
-```bash
-hyprctl monitors
-hyprctl workspaces
-hyprctl workspacerules
-kanshictl status
-```
-
-Expected result when `DP-1` and HDMI are absent: `eDP-1` is enabled with `dpmsStatus: 1`, workspace rules bind existing workspaces to `eDP-1`, the previously active workspace remains active, and kanshi reports `laptop`.
-
-Expected result when `DP-1` is absent and HDMI is present: `eDP-1` is enabled with `dpmsStatus: 1`, `HDMI-A-1` mirrors `eDP-1`, workspaces remain on `eDP-1`, and kanshi reports `mirror`.
-
-If `eDP-1` does not remain enabled after `lid.sh open`, check `kanshictl status`; it should not remain on `docked_dp_only` or `docked_dp_hdmi` after opening the lid.
-
-## Check Lid Binds
-
-```bash
-hyprctl devices
-hyprctl binds
-```
-
-Expected binds:
-
-- `switch:on:Lid Switch` runs `~/.config/hypr/scripts/lid.sh closed`.
-- `switch:off:Lid Switch` runs `~/.config/hypr/scripts/lid.sh open`.
-- The script still reads `/proc/acpi/button/lid/LID0/state` when called without an explicit state.
-
-Check the backup systemd watcher:
+## Verify Ownership
 
 ```bash
 systemctl --user status hypr-lid.service
-systemd-analyze --user verify ~/.config/systemd/user/hypr-lid.service
-systemctl --user show-environment | grep -E 'HYPRLAND_INSTANCE_SIGNATURE|WAYLAND_DISPLAY'
+pgrep -a kanshi || true
+hyprctl binds
 ```
 
-## Re-run Audio Routing
+Expected results:
+
+- `hypr-lid.service` is active.
+- No `kanshi` process is running.
+- No lid switch bind directly invokes `lid.sh`.
+
+## Audio Routing
 
 ```bash
 ~/.config/kanshi/audio-route.sh
-```
-
-Restart the watcher:
-
-```bash
 systemctl --user restart kanshi-audio-route.service
 systemctl --user status kanshi-audio-route.service
 ```
 
-## Check Startup Placement
+The audio service name does not imply display ownership.
+
+## After Editing
 
 ```bash
-hyprctl clients
-hyprctl workspaces
+bash -n ~/.config/hypr/scripts/lid.sh ~/.config/hypr/scripts/lid-watch.sh ~/.config/kanshi/audio-route.sh ~/.config/kanshi/audio-route-watch.sh
+bash ~/dotfiles/scripts/desktop/hypr-lid-deploy/tests/test-lid.sh
+bash ~/dotfiles/scripts/desktop/hypr-lid-deploy/tests/test-lid-watch.sh
+bash ~/dotfiles/scripts/desktop/hypr-lid-deploy/tests/test-deploy.sh
+~/dotfiles/scripts/desktop/hypr-lid-deploy/hypr-lid-deploy.sh --update
 ```
 
-If browser or terminal appears on the wrong workspace after login, inspect the Hyprland `exec-once = [workspace ... silent]` rules and check whether the app restored an existing session/window.
-
-## After Editing Configs
-
-Syntax-check shell hooks:
-
-```bash
-bash -n ~/.config/kanshi/post-docked.sh ~/.config/kanshi/post-docked-open.sh ~/.config/kanshi/post-laptop.sh ~/.config/kanshi/post-mirror.sh ~/.config/kanshi/audio-route.sh ~/.config/kanshi/audio-route-watch.sh ~/.config/hypr/scripts/lid.sh ~/.config/hypr/scripts/lid-watch.sh
-```
-
-Then log out and log back in for full startup validation.
+Log out and back in to validate the full Hyprland startup configuration.

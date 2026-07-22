@@ -7,6 +7,7 @@ STATE="${1:-}"
 LID_STATE_PATH="${LID_STATE_PATH:-}"
 LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/hypr-lid.lock"
 ACTIVE_WORKSPACE_FILE="${HYPR_LID_ACTIVE_WORKSPACE_FILE:-${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-active-workspace}"
+AUDIO_ROUTE_SCRIPT="${HYPR_LID_AUDIO_ROUTE_SCRIPT:-${HOME}/.config/kanshi/audio-route.sh}"
 
 command -v hyprctl >/dev/null 2>&1 || exit 0
 
@@ -51,34 +52,46 @@ hdmi_available() {
   monitor_known "$HDMI"
 }
 
-switch_docked_profile() {
-  command -v kanshictl >/dev/null 2>&1 || return 1
-
-  kanshictl switch docked_dp_hdmi >/dev/null 2>&1 || \
-    kanshictl switch docked_dp_only >/dev/null 2>&1
-}
-
-switch_laptop_profile() {
-  command -v kanshictl >/dev/null 2>&1 || return 1
-
-  kanshictl switch laptop >/dev/null 2>&1
-}
-
-switch_mirror_profile() {
-  command -v kanshictl >/dev/null 2>&1 || return 1
-
-  kanshictl switch mirror >/dev/null 2>&1
-}
-
-switch_docked_open_profile() {
-  command -v kanshictl >/dev/null 2>&1 || return 1
-
-  kanshictl switch docked_open_dp_hdmi >/dev/null 2>&1 || \
-    kanshictl switch docked_open_dp_only >/dev/null 2>&1
-}
-
 internal_available() {
   monitor_active "$INTERNAL"
+}
+
+wait_for_monitor() {
+  local monitor="$1"
+  local i=0
+
+  while [ "$i" -lt 30 ]; do
+    monitor_active "$monitor" && return 0
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  return 1
+}
+
+enable_external() {
+  if ! monitor_active "$EXTERNAL"; then
+    hyprctl keyword monitor "$EXTERNAL,2560x1440@120.01,1920x0,1" >/dev/null 2>&1 || true
+  fi
+  wait_for_monitor "$EXTERNAL"
+}
+
+enable_internal() {
+  if ! monitor_active "$INTERNAL"; then
+    hyprctl keyword monitor "$INTERNAL,preferred,0x0,1" >/dev/null 2>&1 || true
+  fi
+  hyprctl dispatch dpms on "$INTERNAL" >/dev/null 2>&1 || true
+  wait_for_monitor "$INTERNAL"
+}
+
+disable_hdmi() {
+  monitor_active "$HDMI" || return 0
+  hyprctl keyword monitor "$HDMI,disable" >/dev/null 2>&1 || true
+}
+
+route_audio() {
+  [ -x "$AUDIO_ROUTE_SCRIPT" ] || return 0
+  "$AUDIO_ROUTE_SCRIPT" >/dev/null 2>&1 || true
 }
 
 active_workspace() {
@@ -168,18 +181,6 @@ restore_workspace() {
   hyprctl dispatch workspace "$1" >/dev/null 2>&1 || true
 }
 
-wait_for_internal() {
-  local i=0
-
-  while [ "$i" -lt 30 ]; do
-    if internal_available; then
-      break
-    fi
-    sleep 0.1
-    i=$((i + 1))
-  done
-}
-
 move_main_workspaces() {
   local target="$1"
   local current_ws="${2:-}"
@@ -223,12 +224,6 @@ configure_docked_open_workspaces() {
   fi
 }
 
-reload_waybar() {
-  command -v pgrep >/dev/null 2>&1 || return 0
-  pgrep -x waybar >/dev/null 2>&1 || return 0
-  hyprctl dispatch exec "bash -lc 'pkill -x waybar >/dev/null 2>&1 || true; waybar'" >/dev/null 2>&1 || true
-}
-
 case "$STATE" in
   closed|close)
     current_ws="$(active_workspace)"
@@ -243,12 +238,13 @@ case "$STATE" in
     done
 
     if external_available; then
-      switch_docked_profile || true
-
-      move_main_workspaces "$EXTERNAL" "$current_ws"
-      hyprctl keyword monitor "$INTERNAL,disable" >/dev/null 2>&1 || true
-      restore_workspace "$current_ws"
-      reload_waybar
+      if enable_external; then
+        disable_hdmi
+        move_main_workspaces "$EXTERNAL" "$current_ws"
+        hyprctl keyword monitor "$INTERNAL,disable" >/dev/null 2>&1 || true
+        restore_workspace "$current_ws"
+        route_audio
+      fi
     fi
     ;;
   open)
@@ -259,28 +255,16 @@ case "$STATE" in
     fi
     internal_ws="$(next_docked_open_workspace)"
 
-    if external_available || hdmi_available; then
-      internal_monitor="$INTERNAL,preferred,0x0,1"
-    else
-      internal_monitor="$INTERNAL,preferred,auto,1"
-    fi
-
-    hyprctl keyword monitor "$internal_monitor" >/dev/null 2>&1 || true
-    hyprctl dispatch dpms on "$INTERNAL" >/dev/null 2>&1 || true
-
     if external_available; then
-      switch_docked_open_profile || true
+      enable_external || exit 0
+      disable_hdmi
+      enable_internal || exit 0
     elif hdmi_available; then
-      switch_mirror_profile || true
+      enable_internal || exit 0
       hyprctl keyword monitor "$HDMI,1920x1080@60,0x0,1,mirror,$INTERNAL" >/dev/null 2>&1 || true
     else
-      switch_laptop_profile || true
+      enable_internal || exit 0
     fi
-
-    hyprctl keyword monitor "$internal_monitor" >/dev/null 2>&1 || true
-    hyprctl dispatch dpms on "$INTERNAL" >/dev/null 2>&1 || true
-
-    wait_for_internal
 
     if internal_available; then
       if external_available; then
@@ -291,7 +275,7 @@ case "$STATE" in
         move_main_workspaces "$INTERNAL" "$restore_ws"
         restore_workspace "$restore_ws"
       fi
-      reload_waybar
+      route_audio
     fi
     ;;
 esac

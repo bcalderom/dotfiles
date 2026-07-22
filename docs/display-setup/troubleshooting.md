@@ -1,190 +1,104 @@
 # Troubleshooting
 
-## Browser And Terminal Open On Workspace 1
-
-Likely cause:
-
-- Hyprland workspace-targeted `exec-once` rules are missing or not reloaded.
-- The app restored an existing session/window before the workspace rule applied.
-
-Checks:
-
-```bash
-hyprctl clients
-hyprctl workspaces
-```
-
-Preferred fix:
-
-- Keep browser and terminal startup in native Hyprland `exec-once = [workspace ... silent]` rules.
-- Restart the Hyprland session after changing startup rules.
-
-## Docked Monitor Does Not Become Primary
+## Repeated Display Changes Or Client Crashes
 
 Likely causes:
 
-- Kanshi did not select `docked_dp_only` or `docked_dp_hdmi`.
-- Monitor identifier changed after an update.
-- `DP-1` is not the active connector name anymore.
+- Another process is configuring outputs.
+- The connector is flapping longer than the debounce window.
+- A previous Hyprland session left stale user services running.
 
 Checks:
 
 ```bash
-hyprctl monitors
-kanshictl status
+systemctl --user status hypr-lid.service
+journalctl --user -u hypr-lid.service -b
+pgrep -a kanshi || true
+hyprctl binds
+coredumpctl list --since today
 ```
 
-Fix path:
+Only `hypr-lid.service` should automatically invoke display transitions. Stop any `kanshi` process and remove direct lid handlers before retesting.
 
-- Compare live identifiers with `hardware-and-identifiers.md`.
-- Update `~/.config/kanshi/config` aliases if the descriptor changed.
+## Docked Monitor Does Not Activate
+
+```bash
+hyprctl monitors
+hyprctl monitors all
+systemctl --user status hypr-lid.service
+```
+
+- Confirm the connector is still named `DP-1`.
+- Compare the live descriptor with `hardware-and-identifiers.md`.
+- Run `~/.config/hypr/scripts/lid.sh closed` manually.
+- Check the service journal for unstable alternating topology entries.
 
 ## Lid Closed But Internal Display Stays Enabled
 
-Likely causes:
-
-- Hyprland did not receive the lid switch event.
-- `~/.config/hypr/scripts/lid.sh` did not see `DP-1`.
-- Kanshi stayed on the `laptop` profile and re-enabled `eDP-1`.
-- Workspace `2` was not moved to `DP-1` before disabling `eDP-1`.
-- A stale systemd lid unit caused confusion.
-
-Checks:
-
 ```bash
-hyprctl devices
-hyprctl binds
+grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
 hyprctl monitors
 hyprctl workspaces
 hyprctl workspacerules
-kanshictl status
-systemctl --user status hypr-lid.service
-systemctl --user show-environment | grep -E 'HYPRLAND_INSTANCE_SIGNATURE|WAYLAND_DISPLAY'
-grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
+journalctl --user -u hypr-lid.service -b
 ```
 
-Fix path:
-
-- Ensure explicit close/open switch binds exist in Hyprland config.
-- Verify `DP-1` is still the external connector name.
-- Run `~/.config/hypr/scripts/lid.sh closed` manually while connected to `DP-1` to test the correction.
-- After the manual correction, confirm `kanshictl status` reports a docked profile. If it still reports `laptop`, kanshi is fighting the lid correction.
-
-Expected corrected state:
-
-- `hyprctl monitors` shows `DP-1` and does not show enabled `eDP-1`.
-- `hyprctl workspaces` shows existing workspace entries on `DP-1`; empty inactive workspaces may be absent.
-- `hyprctl workspacerules` shows workspace `1`, `2`, and `3` bound to `DP-1`.
-- `hyprctl activeworkspace` shows the same workspace number that was active before closing the lid.
-- `kanshictl status` shows `docked_dp_only` or `docked_dp_hdmi`.
+The coordinator intentionally leaves `eDP-1` enabled until `DP-1` is active. If `DP-1` never activates, fix that output first instead of forcing the internal display off.
 
 ## Laptop Screen Black After Unplug
 
-Likely causes:
-
-- The lid open event fired before `DP-1` disappeared, so the laptop profile was not selected yet.
-- Kanshi switched to `laptop`, but `eDP-1` DPMS stayed off.
-- Workspaces remained logically available, but focus did not move cleanly back to `eDP-1`.
-- The backup lid watcher was not running, so unplug recovery could not read the last stable active workspace.
-
-Checks:
-
 ```bash
+~/.config/hypr/scripts/lid.sh open
 hyprctl monitors
 hyprctl workspaces
-hyprctl workspacerules
-kanshictl status
-grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
+hyprctl activeworkspace
 ```
 
-Fix path:
+Expected: `eDP-1` is active with DPMS on and the last stable active workspace is restored. Confirm `hypr-lid.service` is running so future topology changes reconcile automatically.
 
-- Run `~/.config/hypr/scripts/lid.sh open` after unplugging from `DP-1`.
-- Confirm `systemctl --user status hypr-lid.service` is active before testing unplug recovery.
-- If that works, the issue is the unplug/open race and `post-laptop.sh` should be checked because it owns profile-triggered recovery.
+## Laptop Screen Black While Docked
 
-Expected corrected state:
-
-- `hyprctl monitors` shows enabled `eDP-1` with `dpmsStatus: 1`.
-- `hyprctl workspaces` shows existing workspace entries on `eDP-1`; empty inactive workspaces may be absent.
-- `hyprctl workspacerules` shows workspace `1`, `2`, and `3` bound to `eDP-1`.
-- `hyprctl activeworkspace` shows the same workspace number that was active before unplug/open recovery.
-- `kanshictl status` shows `laptop`.
-
-## Laptop Screen Black While Still Docked
-
-Likely causes:
-
-- Kanshi stayed on `docked_dp_only` or `docked_dp_hdmi`, which intentionally disables `eDP-1`.
-- The lid-open event did not switch to a docked-open profile.
-
-Checks:
+Run:
 
 ```bash
-hyprctl monitors
-hyprctl workspaces
-hyprctl workspacerules
-kanshictl status
-grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
+~/.config/hypr/scripts/lid.sh open
 ```
 
-Fix path:
+Expected: both `DP-1` and `eDP-1` are active, existing external workspaces stay on `DP-1`, and the next numbered workspace is on `eDP-1`.
 
-- Run `~/.config/hypr/scripts/lid.sh open` while `DP-1` is connected.
-- Confirm `kanshictl status` changes to `docked_open_dp_only` or `docked_open_dp_hdmi`.
-
-Expected corrected state:
-
-- `hyprctl monitors` shows enabled `DP-1` and `eDP-1`.
-- `hyprctl monitors` shows `dpmsStatus: 1` for `eDP-1`.
-- `hyprctl workspaces` shows existing `DP-1` workspaces on `DP-1`, and the next numbered workspace on `eDP-1`.
-- `hyprctl workspacerules` shows existing `DP-1` workspaces bound to `DP-1`, and the next numbered workspace bound to `eDP-1` with `persistent:false`.
-- `hyprctl activeworkspace` shows the same workspace number that was active before opening the lid.
-- `kanshictl status` shows `docked_open_dp_only` or `docked_open_dp_hdmi`.
-
-If the wrong empty workspace appears on `eDP-1`, rerun `~/.config/hypr/scripts/lid.sh open`; the handler should create/bind the next numbered workspace on `eDP-1` without leaving focus there.
-
-If `hyprctl workspaces` and `hyprctl workspacerules` are correct but Waybar still shows stale workspace buttons, restart Waybar with `SUPER+W`. The lid and kanshi transition hooks already ask Hyprland to restart Waybar after docked, docked-open, and laptop transitions when Waybar is running.
-
-## HDMI Presentation Does Not Mirror
-
-Likely causes:
-
-- Kanshi did not select the `mirror` profile.
-- HDMI connector is not `HDMI-A-1`.
-- The projector/TV does not accept `1920x1080@60Hz`.
-
-Checks:
+## HDMI Does Not Mirror
 
 ```bash
-hyprctl monitors
-kanshictl status
+hyprctl monitors all
+~/.config/hypr/scripts/lid.sh open
 ```
 
-Fix path:
+- Confirm HDMI is named `HDMI-A-1`.
+- Confirm `DP-1` is absent; it takes priority over HDMI.
+- Verify the display accepts `1920x1080@60Hz`.
 
-- Try preferred HDMI mode temporarily.
-- Update `~/.config/kanshi/config` if the connector name changed.
+## Waybar Shows Stale Workspaces
+
+Display transitions no longer restart Waybar. If Hyprland state is correct but Waybar is stale, restart it manually with `SUPER+W` and inspect Waybar logs separately.
+
+## Chromium Or Electron App Does Not Open
+
+If an application process exists but `hyprctl clients` has no matching window, check for blocked desktop-handler detection:
+
+```bash
+ps -C xdg-settings,xprop -o pid,ppid,etime,stat,args
+ps -C Xwayland -o pid,ppid,etime,stat,args
+```
+
+`xdg-utils` does not identify Hyprland directly and can fall back to `xprop`. The Hyprland session exports `DE=generic` so these checks use the freedesktop MIME configuration without requiring Xwayland. Processes launched before that environment was applied must be restarted.
 
 ## Audio Goes To The Wrong Device
-
-Likely causes:
-
-- Audio device appeared after the kanshi hook already ran.
-- `kanshi-audio-route.service` is not running.
-- Sink/source names changed after a PipeWire/WirePlumber update.
-
-Checks:
 
 ```bash
 systemctl --user status kanshi-audio-route.service
 pactl list short sinks
 pactl list short sources
-pactl info
+~/.config/kanshi/audio-route.sh
 ```
 
-Fix path:
-
-- Restart the watcher service.
-- Re-run `~/.config/kanshi/audio-route.sh`.
-- Update matching patterns in `audio-route.sh` only if sink/source names changed.
+The audio service name and directory are historical; neither should configure displays.

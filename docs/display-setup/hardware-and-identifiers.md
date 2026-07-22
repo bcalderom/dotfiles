@@ -1,24 +1,14 @@
 # Hardware And Identifiers
 
-This setup depends on stable monitor identifiers. When display behavior changes after updates, verify this file against `hyprctl monitors` and `kanshictl` output.
+The transition coordinator uses connector names; Hyprland startup defaults use stable monitor descriptors.
 
 ## Connectors
 
 | Role | Connector | Usage |
 | --- | --- | --- |
-| Internal laptop display | `eDP-1` | Mobile/cafe mode and HDMI mirror source |
-| USB-C docked monitor | `DP-1` | Desktop workstation with laptop lid closed |
-| HDMI presentation output | `HDMI-A-1` | Meeting/presentation mirror mode |
-
-## Kanshi Output Aliases
-
-Configured in `~/.config/kanshi/config`:
-
-| Alias | Output identifier |
-| --- | --- |
-| `$INTERNAL` | `AU Optronics 0x369F Unknown` |
-| `$DOCK` | `ViewSonic Corporation VX2768-2KPC W5H211040271` |
-| `$HDMI` | `HDMI-A-1` |
+| Internal laptop display | `eDP-1` | Mobile mode and HDMI mirror source |
+| USB-C monitor | `DP-1` | Docked desktop output |
+| HDMI output | `HDMI-A-1` | Presentation mirror |
 
 ## Hyprland Monitor Rules
 
@@ -26,22 +16,15 @@ Configured in `~/.config/hypr/hyprland.conf`:
 
 | Monitor rule | Purpose |
 | --- | --- |
-| `desc:AU Optronics 0x369F` | Internal display fallback/default |
-| `desc:ViewSonic Corporation VX2768-2KPC W5H211040271` | Docked ViewSonic monitor |
-| `monitor=,preferred,auto,1` | Generic fallback for any other output |
+| `desc:AU Optronics 0x369F` | Internal display at `0x0` |
+| `desc:ViewSonic Corporation VX2768-2KPC W5H211040271` | ViewSonic at `2560x1440@120.01Hz`, position `1920x0` |
+| `monitor=,preferred,auto,1` | Generic output fallback |
 
-## Verification Commands
+## Verification
 
 ```bash
 hyprctl monitors
-kanshictl status
+hyprctl monitors all
 ```
 
-## Maintenance Note
-
-The internal display identifier differs slightly between kanshi and Hyprland today:
-
-- kanshi: `AU Optronics 0x369F Unknown`
-- Hyprland: `desc:AU Optronics 0x369F`
-
-If profile matching becomes unreliable after an update, compare both with the live `hyprctl monitors` output and normalize where possible.
+If connector names or descriptors change after an update, update both `hyprland.conf` and the output constants in `lid.sh` and `lid-watch.sh`.

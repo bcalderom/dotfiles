@@ -18,16 +18,16 @@ mkdir -p "${MOCK_BIN}"
 
 LID_STATE_PATH="${TMPDIR}/lid-state"
 MONITOR_STATE_PATH="${TMPDIR}/monitor-state"
-PROFILE_STATE_PATH="${TMPDIR}/profile-state"
 RULE_STATE_PATH="${TMPDIR}/rule-state"
 HANDLER_LOG="${TMPDIR}/handler.log"
 LID_HANDLER="${TMPDIR}/lid-handler"
 HYPR_LID_ACTIVE_WORKSPACE_FILE="${TMPDIR}/active-workspace"
-export LID_STATE_PATH MONITOR_STATE_PATH PROFILE_STATE_PATH RULE_STATE_PATH HANDLER_LOG LID_HANDLER HYPR_LID_ACTIVE_WORKSPACE_FILE
+export LID_STATE_PATH MONITOR_STATE_PATH RULE_STATE_PATH HANDLER_LOG LID_HANDLER HYPR_LID_ACTIVE_WORKSPACE_FILE
 
 cat > "${MOCK_BIN}/hyprctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "${HYPR_UNAVAILABLE:-0}" -eq 1 ]] && exit 1
 
 case "${1:-}" in
   -j)
@@ -133,25 +133,11 @@ esac
 EOF
 chmod +x "${MOCK_BIN}/hyprctl"
 
-cat > "${MOCK_BIN}/kanshictl" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "${1:-}" == "status" ]]; then
-  if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
-    exit 1
-  fi
-
-  printf 'Current profile: %s\n' "$(cat "${PROFILE_STATE_PATH}")"
-fi
-EOF
-chmod +x "${MOCK_BIN}/kanshictl"
-
 cat > "${LID_HANDLER}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-lid_state="$(grep -o 'closed\|open' "${LID_STATE_PATH}")"
+lid_state="$1"
 monitor_state="$(cat "${MONITOR_STATE_PATH}")"
 
 if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
@@ -159,23 +145,23 @@ if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPL
   exit 1
 fi
 
-printf '%s %s %s %s\n' "${lid_state}" "${monitor_state}" "$(cat "${PROFILE_STATE_PATH}")" "$(cat "${RULE_STATE_PATH}")" >> "${HANDLER_LOG}"
+printf '%s %s %s\n' "${lid_state}" "${monitor_state}" "$(cat "${RULE_STATE_PATH}")" >> "${HANDLER_LOG}"
 
 case "${lid_state}:${monitor_state}" in
-  closed:external|closed:both)
-    printf 'docked_dp_only\n' > "${PROFILE_STATE_PATH}"
+  closed:both)
+    printf 'external\n' > "${MONITOR_STATE_PATH}"
+    printf 'docked\n' > "${RULE_STATE_PATH}"
+    ;;
+  closed:external)
     printf 'docked\n' > "${RULE_STATE_PATH}"
     ;;
   open:both)
-    printf 'docked_open_dp_only\n' > "${PROFILE_STATE_PATH}"
     printf 'docked-open\n' > "${RULE_STATE_PATH}"
     ;;
   open:internal)
-    printf 'laptop\n' > "${PROFILE_STATE_PATH}"
     printf 'laptop\n' > "${RULE_STATE_PATH}"
     ;;
   open:mirror)
-    printf 'mirror\n' > "${PROFILE_STATE_PATH}"
     printf 'mirror\n' > "${RULE_STATE_PATH}"
     ;;
 esac
@@ -183,11 +169,10 @@ EOF
 chmod +x "${LID_HANDLER}"
 
 printf 'state: closed\n' > "${LID_STATE_PATH}"
-printf 'external\n' > "${MONITOR_STATE_PATH}"
-printf 'docked_dp_only\n' > "${PROFILE_STATE_PATH}"
+printf 'both\n' > "${MONITOR_STATE_PATH}"
 printf 'docked\n' > "${RULE_STATE_PATH}"
 
-env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_STABLE_SAMPLES=3 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
 sleep 0.15
@@ -196,11 +181,11 @@ printf 'both\n' > "${MONITOR_STATE_PATH}"
 
 wait "${watch_pid}"
 
-grep -Fq 'closed external' "${HANDLER_LOG}"
+grep -Fq 'closed both' "${HANDLER_LOG}"
 grep -Fq 'open both' "${HANDLER_LOG}"
 
-if [[ "$(grep -Fc 'closed external' "${HANDLER_LOG}")" -ne 1 ]]; then
-  echo "Expected one closed transition" >&2
+if [[ "$(grep -Fc 'closed ' "${HANDLER_LOG}")" -ne 1 ]]; then
+  echo "Expected one closed transition after the handler changed topology" >&2
   exit 1
 fi
 
@@ -212,16 +197,15 @@ fi
 : > "${HANDLER_LOG}"
 printf 'state: open\n' > "${LID_STATE_PATH}"
 printf 'internal\n' > "${MONITOR_STATE_PATH}"
-printf 'laptop\n' > "${PROFILE_STATE_PATH}"
 printf 'laptop\n' > "${RULE_STATE_PATH}"
 
-env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=25 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_STABLE_SAMPLES=3 LID_RECONCILE_INTERVAL=100 LID_WATCH_ITERATIONS=40 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
-sleep 0.15
+sleep 0.3
 printf 'both\n' > "${MONITOR_STATE_PATH}"
 
-sleep 0.15
+sleep 0.3
 printf 'internal\n' > "${MONITOR_STATE_PATH}"
 
 wait "${watch_pid}"
@@ -241,19 +225,17 @@ fi
 : > "${HANDLER_LOG}"
 printf 'state: closed\n' > "${LID_STATE_PATH}"
 printf 'external\n' > "${MONITOR_STATE_PATH}"
-printf 'docked_dp_only\n' > "${PROFILE_STATE_PATH}"
 printf 'docked\n' > "${RULE_STATE_PATH}"
 
-env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_STABLE_SAMPLES=3 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
 sleep 0.15
-printf 'laptop\n' > "${PROFILE_STATE_PATH}"
 printf 'laptop\n' > "${RULE_STATE_PATH}"
 
 wait "${watch_pid}"
 
-if [[ "$(grep -Fc 'closed external laptop laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
+if [[ "$(grep -Fc 'closed external laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
   echo "Expected one stable-state mismatch reconciliation" >&2
   exit 1
 fi
@@ -261,10 +243,9 @@ fi
 : > "${HANDLER_LOG}"
 printf 'state: open\n' > "${LID_STATE_PATH}"
 printf 'both\n' > "${MONITOR_STATE_PATH}"
-printf 'docked_open_dp_only\n' > "${PROFILE_STATE_PATH}"
 printf 'docked-open\n' > "${RULE_STATE_PATH}"
 
-env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_STABLE_SAMPLES=3 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
 sleep 0.15
@@ -272,7 +253,7 @@ printf 'wrong-auto\n' > "${RULE_STATE_PATH}"
 
 wait "${watch_pid}"
 
-if [[ "$(grep -Fc 'open both docked_open_dp_only wrong-auto' "${HANDLER_LOG}")" -ne 1 ]]; then
+if [[ "$(grep -Fc 'open both wrong-auto' "${HANDLER_LOG}")" -ne 1 ]]; then
   echo "Expected one dynamic workspace reconciliation" >&2
   exit 1
 fi
@@ -280,17 +261,40 @@ fi
 : > "${HANDLER_LOG}"
 printf 'state: open\n' > "${LID_STATE_PATH}"
 printf 'mirror\n' > "${MONITOR_STATE_PATH}"
-printf 'laptop\n' > "${PROFILE_STATE_PATH}"
 printf 'laptop\n' > "${RULE_STATE_PATH}"
 
-env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0 LID_STABLE_SAMPLES=3 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=20 bash "${WATCH_SCRIPT}" &
 watch_pid="$!"
 
 wait "${watch_pid}"
 
-if [[ "$(grep -Fc 'open mirror laptop laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
+if [[ "$(grep -Fc 'open mirror laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
   echo "Expected one HDMI mirror reconciliation" >&2
   exit 1
 fi
 
+: > "${HANDLER_LOG}"
+printf 'state: open\n' > "${LID_STATE_PATH}"
+printf 'internal\n' > "${MONITOR_STATE_PATH}"
+printf 'laptop\n' > "${RULE_STATE_PATH}"
+
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0.05 LID_SETTLE_DELAY=0.05 LID_STABLE_SAMPLES=6 LID_RECONCILE_INTERVAL=10 LID_WATCH_ITERATIONS=35 bash "${WATCH_SCRIPT}" &
+watch_pid="$!"
+
+sleep 0.4
+: > "${HANDLER_LOG}"
+printf 'both\n' > "${MONITOR_STATE_PATH}"
+sleep 0.08
+printf 'internal\n' > "${MONITOR_STATE_PATH}"
+
+wait "${watch_pid}"
+
+if grep -Fq 'open both' "${HANDLER_LOG}"; then
+  echo "Did not expect a transient topology to be handled" >&2
+  exit 1
+fi
+
+: > "${HANDLER_LOG}"
+HYPR_UNAVAILABLE=1 PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0 LID_SETTLE_DELAY=0 LID_WATCH_ITERATIONS=3 bash "${WATCH_SCRIPT}"
+[[ ! -s "${HANDLER_LOG}" ]] || { echo "Did not expect handling without Hyprland" >&2; exit 1; }
 echo "OK"

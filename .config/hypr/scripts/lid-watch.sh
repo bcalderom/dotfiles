@@ -5,13 +5,13 @@ LID_STATE_PATH="${LID_STATE_PATH:-/proc/acpi/button/lid/LID0/state}"
 LID_HANDLER="${LID_HANDLER:-${HOME}/.config/hypr/scripts/lid.sh}"
 LID_POLL_INTERVAL="${LID_POLL_INTERVAL:-1}"
 LID_SETTLE_DELAY="${LID_SETTLE_DELAY:-0.5}"
+LID_STABLE_SAMPLES="${LID_STABLE_SAMPLES:-4}"
 LID_RECONCILE_INTERVAL="${LID_RECONCILE_INTERVAL:-5}"
 LID_WATCH_ITERATIONS="${LID_WATCH_ITERATIONS:-}"
 LID_INTERNAL_OUTPUT="${LID_INTERNAL_OUTPUT:-eDP-1}"
 LID_EXTERNAL_OUTPUT="${LID_EXTERNAL_OUTPUT:-DP-1}"
 LID_HDMI_OUTPUT="${LID_HDMI_OUTPUT:-HDMI-A-1}"
 ACTIVE_WORKSPACE_FILE="${HYPR_LID_ACTIVE_WORKSPACE_FILE:-${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-active-workspace}"
-
 log() { printf 'hypr-lid: %s\n' "$*" >&2; }
 
 active_workspace() { hyprctl activeworkspace 2>/dev/null | awk '/^workspace ID/ { print $3; exit }'; }
@@ -110,7 +110,7 @@ read_monitor_state() {
 }
 
 read_watch_state() {
-  local lid_state
+  local lid_state monitor_state
 
   lid_state="$(read_lid_state)"
   if [ "${lid_state}" = "unknown" ]; then
@@ -118,23 +118,8 @@ read_watch_state() {
     return 0
   fi
 
-  printf '%s|%s' "${lid_state}" "$(read_monitor_state)"
-}
-
-profile_mismatch() {
-  local expected_prefix profile
-
-  expected_prefix="$1"
-
-  ensure_hyprland_env || return 1
-  command -v kanshictl >/dev/null 2>&1 || return 1
-  profile="$(kanshictl status 2>/dev/null | awk -F': ' '/^Current profile:/ { print $2; exit }')"
-  [ -n "${profile}" ] || return 1
-
-  case "${profile}" in
-    "${expected_prefix}"*) return 1 ;;
-    *) return 0 ;;
-  esac
+  monitor_state="$(read_monitor_state)"
+  case "${monitor_state}" in *unknown*) printf 'unknown' ;; *) printf '%s|%s' "${lid_state}" "${monitor_state}" ;; esac
 }
 
 workspace_rule_mismatch() {
@@ -214,7 +199,6 @@ needs_reconcile() {
           return 0
           ;;
       esac
-      profile_mismatch docked_dp_ && return 0
       workspace_mismatch 1 "${LID_EXTERNAL_OUTPUT}" && return 0
       workspace_mismatch 2 "${LID_EXTERNAL_OUTPUT}" && return 0
       workspace_mismatch 3 "${LID_EXTERNAL_OUTPUT}" && return 0
@@ -226,7 +210,6 @@ needs_reconcile() {
           return 0
           ;;
       esac
-      profile_mismatch docked_open_dp_ && return 0
       workspace_mismatch 1 "${LID_EXTERNAL_OUTPUT}" && return 0
       workspace_mismatch 2 "${LID_EXTERNAL_OUTPUT}" && return 0
       workspace_rule_mismatch "${internal_workspace}" "${LID_INTERNAL_OUTPUT}" && return 0
@@ -238,7 +221,6 @@ needs_reconcile() {
           return 0
           ;;
       esac
-      profile_mismatch mirror && return 0
       workspace_mismatch 1 "${LID_INTERNAL_OUTPUT}" && return 0
       workspace_mismatch 2 "${LID_INTERNAL_OUTPUT}" && return 0
       workspace_mismatch 3 "${LID_INTERNAL_OUTPUT}" && return 0
@@ -249,7 +231,6 @@ needs_reconcile() {
           return 0
           ;;
       esac
-      profile_mismatch laptop && return 0
       workspace_mismatch 1 "${LID_INTERNAL_OUTPUT}" && return 0
       workspace_mismatch 2 "${LID_INTERNAL_OUTPUT}" && return 0
       workspace_mismatch 3 "${LID_INTERNAL_OUTPUT}" && return 0
@@ -257,6 +238,21 @@ needs_reconcile() {
   esac
 
   return 1
+}
+
+stable_state() {
+  local expected="$1"
+  local sample=1
+  local current
+
+  while [ "${sample}" -lt "${LID_STABLE_SAMPLES}" ]; do
+    sleep "${LID_SETTLE_DELAY}"
+    current="$(read_watch_state)"
+    [ "${current}" = "${expected}" ] || return 1
+    sample=$((sample + 1))
+  done
+
+  printf '%s' "${expected}"
 }
 
 last_state=""
@@ -276,13 +272,18 @@ while :; do
   fi
 
   if [ "${state}" != "unknown" ] && { [ "${state}" != "${last_state}" ] || { [ "${check_reconcile}" -eq 1 ] && needs_reconcile "${state}"; }; }; then
-    sleep "${LID_SETTLE_DELAY}"
-    state="$(read_watch_state)"
+    if ! state="$(stable_state "${state}")"; then
+      state="unknown"
+    fi
 
     if [ "${state}" != "unknown" ] && { [ "${state}" != "${last_state}" ] || needs_reconcile "${state}"; }; then
       last_state="${state}"
       log "handling ${state}"
       run_handler "${state%%|*}"
+      state="$(read_watch_state)"
+      if [ "${state}" != "unknown" ] && stable_state "${state}" >/dev/null; then
+        last_state="${state}"
+      fi
     fi
   fi
 

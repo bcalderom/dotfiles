@@ -1,42 +1,6 @@
 # Config Map
 
-This map defines which file owns each part of the setup. Keep responsibilities separated to avoid update-sensitive races.
-
-## Display Profiles
-
-File: `~/.config/kanshi/config`
-
-Responsibilities:
-
-- Detect laptop-only, docked USB-C, and HDMI mirror scenarios.
-- Enable, disable, position, and set modes for outputs.
-- Run the matching post-profile hook.
-
-Profiles:
-
-- `docked_dp_hdmi`: dock monitor enabled, internal disabled, HDMI disabled.
-- `docked_dp_only`: dock monitor enabled, internal disabled.
-- `docked_open_dp_hdmi`: internal and dock monitor enabled, HDMI disabled.
-- `docked_open_dp_only`: internal and dock monitor enabled.
-- `mirror`: internal enabled and HDMI mirrored.
-- `laptop`: internal display only.
-
-## Post-Profile Hooks
-
-Files:
-
-- `~/.config/kanshi/post-docked.sh`
-- `~/.config/kanshi/post-laptop.sh`
-- `~/.config/kanshi/post-mirror.sh`
-
-Responsibilities:
-
-- Wait briefly for Hyprland to expose the expected monitor.
-- Set Hyprland workspace monitor rules and move existing workspaces plus the active workspace to the expected monitor for docked, laptop, and mirror modes.
-- Force `eDP-1` and DPMS on in laptop mode to recover after unplugging from docked mode.
-- Apply mirror-specific Hyprland monitor keywords.
-- Re-run audio routing after the display profile changes.
-- Restart Waybar through Hyprland after docked, docked-open, and laptop display transitions when Waybar is already running.
+This map defines one owner for every part of the setup. Do not add another automatic process that calls `hyprctl keyword monitor`.
 
 ## Hyprland Session
 
@@ -44,58 +8,47 @@ File: `~/.config/hypr/hyprland.conf`
 
 Responsibilities:
 
-- Define monitor fallback rules.
-- Start `kanshi`, `hypridle`, `waybar`, `swaync`, and current app autostart.
-- Define workspace and app keybinds.
-- Bind lid switch events to the lid script.
+- Define descriptor-based monitor defaults and the generic fallback.
+- Start `hypridle`, Waybar, SwayNC, applications, and `hypr-lid.service`.
+- Define workspace and application keybinds.
+- Export `DE=generic` so `xdg-utils` does not probe an unavailable X server when identifying Hyprland.
 
-Important lines:
+Hyprland does not bind lid switch events directly. It also does not start `kanshi` or invoke `lid.sh` separately at startup.
 
-- `exec-once = kanshi`
-- `exec-once = ~/.config/hypr/scripts/lid.sh`
-- `exec-once = bash -lc 'dbus-update-activation-environment --systemd WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP; systemctl --user restart hypr-lid.service'`
-- `exec-once = [workspace 1 silent] $browser`
-- `exec-once = [workspace 2 silent] $terminal`
-- `bindl = ,switch:on:Lid Switch,exec,~/.config/hypr/scripts/lid.sh closed`
-- `bindl = ,switch:off:Lid Switch,exec,~/.config/hypr/scripts/lid.sh open`
-
-## Lid Handling
+## Transition Coordinator
 
 Files:
 
-- `~/.config/hypr/scripts/lid.sh`
 - `~/.config/hypr/scripts/lid-watch.sh`
+- `~/.config/hypr/scripts/lid.sh`
 - `~/.config/systemd/user/hypr-lid.service`
 
-Responsibilities:
+`lid-watch.sh` responsibilities:
 
-- Run once at startup to handle sessions that start with the lid already closed.
-- Accept explicit `open`/`closed` arguments from Hyprland switch binds and the watcher; fall back to reading the lid state when called without arguments.
-- Run a user service watcher that polls lid state and `DP-1`/`eDP-1`/`HDMI-A-1` topology, then calls `lid.sh` when either changes.
-- Track the last stable active workspace in `${XDG_RUNTIME_DIR}/hypr-lid-active-workspace` so unplug recovery can restore focus after Hyprland temporarily changes the active workspace.
-- If lid closes and `DP-1` exists, switch kanshi to a docked profile, bind/move existing workspaces and the active workspace to `DP-1`, disable `eDP-1`, then restore the previously active workspace.
-- If lid opens and `DP-1` is still present, switch kanshi to a docked-open profile, request `eDP-1` with preferred mode, force DPMS on, keep existing `DP-1` workspaces on `DP-1`, create/bind the next numbered workspace on `eDP-1`, and restore the previously active workspace.
-- If lid opens and `DP-1` is absent but `HDMI-A-1` is present, switch kanshi to `mirror`, keep `eDP-1` as the master output, mirror it to HDMI, move workspaces to `eDP-1`, and restore the previously active workspace.
-- If lid opens and no external display is present, switch kanshi to `laptop`, request `eDP-1` with preferred mode, force DPMS on, bind/move existing workspaces and the active workspace to `eDP-1`, and restore the previously active workspace.
+- Discover the active Hyprland instance when systemd lacks its environment.
+- Poll lid state and the `DP-1`, `eDP-1`, and `HDMI-A-1` topology.
+- Require four identical samples, separated by 0.5 seconds, before handling a changed topology.
+- Reconcile stable states whose monitor or workspace arrangement is wrong.
+- Record the last stable active workspace for unplug recovery.
 
-Implementation details:
+`lid.sh` responsibilities:
 
-- `lid.sh closed` first tries `kanshictl switch docked_dp_hdmi`.
-- If that does not match the current output set, it falls back to `kanshictl switch docked_dp_only`.
-- This prevents kanshi from staying on `laptop` and immediately re-enabling `eDP-1` after Hyprland disables it.
-- `lid.sh open` switches to `docked_open_dp_hdmi` or `docked_open_dp_only` while `DP-1` is still present.
-- `lid.sh open` gives `DP-1` priority over HDMI when both are connected, matching the kanshi docked profiles that disable HDMI in docked mode.
-- In docked-open mode, the `eDP-1` workspace is `max(existing DP-1 workspace IDs) + 1` and is bound with `persistent:false`; focus is restored afterward.
-- `lid.sh open` switches to `mirror` when `DP-1` is absent and `HDMI-A-1` is connected.
-- `lid.sh open` switches to `laptop` only when `DP-1` and `HDMI-A-1` are absent.
-- The `hyprctl keyword workspace "N,monitor:OUTPUT"` rules are updated during each transition so later manual workspace switches stay on the intended display.
+- Serialize transitions with a runtime lock.
+- Enable and verify the destination output before moving workspaces.
+- Move and rebind existing workspaces while preserving focus.
+- Disable `eDP-1` only after `DP-1` is active and workspace moves are complete.
+- Avoid modesetting outputs that are already active.
+- Give `DP-1` priority over HDMI when both are connected.
+- Configure HDMI mirroring when `DP-1` is absent.
 
-Known cleanup:
+The script still accepts `open` or `closed` for manual recovery and can read the lid state when called without an argument.
 
-- `~/.config/systemd/user/hypr-lid.service` runs `lid-watch.sh` as a backup to Hyprland switch binds because path watching `/proc/acpi/button/lid/LID0/state` is not reliable after system updates.
-- `lid-watch.sh` also watches monitor topology so USB-C connect/disconnect events reconcile workspace rules even when the lid state does not change.
-- `lid-watch.sh` reconciles stable invalid states too, such as a closed lid with `eDP-1` still active or workspace rules pointing at the wrong output.
-- `lid-watch.sh` discovers the active Hyprland instance with `hyprctl instances` if systemd starts it without `HYPRLAND_INSTANCE_SIGNATURE` or `WAYLAND_DISPLAY`.
+## Workspace Rules
+
+- Lid closed with `DP-1`: all existing workspaces move to `DP-1`; rules `1`, `2`, and `3` target `DP-1`.
+- Lid open with `DP-1`: existing external workspaces stay on `DP-1`; the next numbered workspace targets `eDP-1`.
+- Lid open without `DP-1`: all existing workspaces and rules `1`, `2`, and `3` target `eDP-1`.
+- Empty auto-created internal workspaces do not affect the docked-open workspace number.
 
 ## Audio Routing
 
@@ -105,9 +58,4 @@ Files:
 - `~/.config/kanshi/audio-route-watch.sh`
 - `~/.config/systemd/user/kanshi-audio-route.service`
 
-Responsibilities:
-
-- Choose default sink/source after monitor and device changes.
-- Prefer USB/Bluetooth audio devices.
-- Prefer HDMI audio when docked on `DP-1` and no better external device exists.
-- Fall back to internal speaker/headphones and internal microphone.
+These names are historical. The service watches PipeWire events and the transition handler runs the router after a stable display change. Neither configures displays or requires a running `kanshi` process.
