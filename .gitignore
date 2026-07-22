@@ -138,5 +138,6 @@ lambda_package/
 .config/baloofileinformationrc
 .config/obs-studio/
 .config/zoom*
+.config/chromium/
 .config/systemd/user/
 .config/opencode/package-lock.json
