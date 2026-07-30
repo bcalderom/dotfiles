@@ -49,11 +49,11 @@ The script still accepts `open` or `closed` for manual recovery and can read the
 
 ## Workspace Rules
 
-- Lid closed with `DP-1`: protected workspaces move to `DP-1`; rules `1` and `2` target `DP-1`; `eDP-1` remains active as the fallback output.
+- Lid closed with `DP-1`: active and occupied workspaces move to `DP-1`; rules `1` and `2` target `DP-1`; `eDP-1` remains active as the fallback output.
 - Lid open with `DP-1`: existing external workspaces stay on `DP-1`; the next numbered workspace targets `eDP-1`.
-- Lid open without `DP-1`: protected workspaces and rules `1` and `2` target `eDP-1`.
-- Protected workspaces are `1`, `2`, the active workspace, and occupied workspaces.
-- Only `1`, `2`, and occupied workspaces are persistent; an active but empty workspace remains nonpersistent.
+- Lid open without `DP-1`: active and occupied workspaces move to `eDP-1`; rules `1` and `2` target it for future use.
+- All managed workspace rules use `persistent:false`.
+- Empty inactive workspaces disappear; each enabled monitor still has one active workspace as required by Hyprland.
 - Empty auto-created internal workspaces do not affect the docked-open workspace number and are demoted to `persistent:false`.
 
 ## Audio Routing

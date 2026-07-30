@@ -38,7 +38,7 @@ Force closed-lid correction:
 ~/.config/hypr/scripts/lid.sh closed
 ```
 
-Expected with `DP-1` connected: protected workspaces are on `DP-1`, focus is preserved, and `eDP-1` remains logically active with its backlight set to zero.
+Expected with `DP-1` connected: active and occupied workspaces are on `DP-1`, empty inactive workspaces are absent, focus is preserved, and `eDP-1` remains logically active with its backlight set to zero.
 
 Force open-lid correction:
 

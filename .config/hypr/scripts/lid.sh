@@ -181,28 +181,19 @@ next_docked_open_workspace() {
     awk 'max < $1 { max = $1 } END { print max + 1 }'
 }
 
-protected_workspace_ids() {
-  { printf '%s\n' 1 2; [ -n "$1" ] && printf '%s\n' "$1"; workspace_ids_with_windows; } |
+movable_workspace_ids() {
+  { [ -n "$1" ] && printf '%s\n' "$1"; workspace_ids_with_windows; } |
     awk '$1 ~ /^[0-9]+$/ && !seen[$1]++ { print $1 }'
 }
 
-docked_external_workspace_ids() {
-  { printf '%s\n' 1 2; workspace_ids_on_monitor_with_windows "$EXTERNAL"; [ "$2" -eq 1 ] && printf '%s\n' "$1"; } |
+movable_external_workspace_ids() {
+  { workspace_ids_on_monitor_with_windows "$EXTERNAL"; [ "$2" -eq 1 ] && printf '%s\n' "$1"; } |
     awk '$1 ~ /^[0-9]+$/ && !seen[$1]++ { print $1 }'
 }
 
-bind_persistent_workspace() { hyprctl_quiet keyword workspace "$1,monitor:$2,persistent:true" || true; }
 bind_nonpersistent_workspace() { hyprctl_quiet keyword workspace "$1,monitor:$2,persistent:false" || true; }
 move_workspace() { hyprctl_quiet dispatch moveworkspacetomonitor "$1" "$2" || true; }
 restore_workspace() { [ -n "$1" ] && hyprctl_quiet dispatch workspace "$1" || true; }
-
-bind_managed_workspace() {
-  if [ "$1" = 1 ] || [ "$1" = 2 ] || workspace_ids_with_windows | grep -qx "$1"; then
-    bind_persistent_workspace "$1" "$2"
-  else
-    bind_nonpersistent_workspace "$1" "$2"
-  fi
-}
 
 demote_retired_workspaces() {
   local protected_file="$1" workspace monitor
@@ -216,8 +207,10 @@ demote_retired_workspaces() {
 move_main_workspaces() {
   local target="$1" current_ws="${2:-}" protected_file
   protected_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-protected.XXXXXX")" || return 1
-  protected_workspace_ids "$current_ws" > "$protected_file"
-  while IFS= read -r workspace; do bind_managed_workspace "$workspace" "$target"; done < "$protected_file"
+  movable_workspace_ids "$current_ws" > "$protected_file"
+  bind_nonpersistent_workspace 1 "$target"
+  bind_nonpersistent_workspace 2 "$target"
+  while IFS= read -r workspace; do bind_nonpersistent_workspace "$workspace" "$target"; done < "$protected_file"
   demote_retired_workspaces "$protected_file"
   while IFS= read -r workspace; do move_workspace "$workspace" "$target"; done < "$protected_file"
   rm -f "$protected_file"
@@ -229,9 +222,11 @@ configure_docked_open_workspaces() {
   protected_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-protected.XXXXXX")" || return 1
   external_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-external.XXXXXX")" || { rm -f "$protected_file"; return 1; }
 
-  docked_external_workspace_ids "$current_ws" "$restore_current" > "$external_file"
+  movable_external_workspace_ids "$current_ws" "$restore_current" > "$external_file"
   { cat "$external_file"; printf '%s\n' "$internal_ws"; } | awk '$1 ~ /^[0-9]+$/ && !seen[$1]++ { print $1 }' > "$protected_file"
-  while IFS= read -r workspace; do bind_managed_workspace "$workspace" "$EXTERNAL"; done < "$external_file"
+  bind_nonpersistent_workspace 1 "$EXTERNAL"
+  bind_nonpersistent_workspace 2 "$EXTERNAL"
+  while IFS= read -r workspace; do bind_nonpersistent_workspace "$workspace" "$EXTERNAL"; done < "$external_file"
   bind_nonpersistent_workspace "$internal_ws" "$INTERNAL"
   demote_retired_workspaces "$protected_file"
   while IFS= read -r workspace; do move_workspace "$workspace" "$EXTERNAL"; done < "$external_file"

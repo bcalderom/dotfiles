@@ -6,7 +6,7 @@ Trigger: `DP-1` connected and lid closed.
 
 - `DP-1` is active at `2560x1440@120.01Hz`.
 - HDMI is disabled when it is also connected.
-- Protected workspaces and workspace rules move to `DP-1`.
+- Active and occupied workspaces move to `DP-1`.
 - The active workspace is restored.
 - `eDP-1` stays logically active as a hidden fallback output.
 - The `intel_backlight` brightness is saved and set to zero.
@@ -35,10 +35,10 @@ Trigger: `DP-1` connected and lid open.
 Trigger: lid open with no external output.
 
 - `eDP-1` is active at its preferred mode.
-- Protected workspaces and rules `1` and `2` target `eDP-1`.
+- Active and occupied workspaces move to `eDP-1`; rules `1` and `2` target it for future use.
 - Unplug recovery restores the last stable active workspace rather than an empty auto-created workspace.
 
-The coordinator moves and restores workspaces `1`, `2`, the active workspace, and occupied workspaces. Only `1`, `2`, and occupied workspaces use `persistent:true`; workspace `3` and other empty workspaces use `persistent:false`.
+All managed workspace rules use `persistent:false`. Empty inactive workspaces disappear; Hyprland still keeps one active workspace on each enabled monitor even when it is empty.
 
 Closing the lid without an external monitor does not create a display transition; normal suspend or lock policy remains responsible.
 

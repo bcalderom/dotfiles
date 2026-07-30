@@ -91,7 +91,7 @@ case "${1:-}" in
   workspaces)
     case "${HYPR_WORKSPACES:-external12}" in
       external12) ws 1 DP-1 1; ws 2 DP-1 1 ;;
-      external12empty3) ws 1 DP-1 1; ws 2 DP-1 1; ws 3 DP-1 0 ;;
+      external1empty23) ws 1 DP-1 1; ws 2 DP-1 0; ws 3 DP-1 0 ;;
       external123) ws 1 DP-1 1; ws 2 DP-1 1; ws 3 DP-1 1 ;;
       both12auto4) ws 1 DP-1 1; ws 2 DP-1 1; ws 4 eDP-1 0 ;;
       internal12) ws 1 eDP-1 1; ws 2 eDP-1 1 ;;
@@ -162,13 +162,13 @@ assert_no_process_restart() {
 echo "==> close lid with active dock"
 printf 'state: closed\n' > "${LID_STATE_PATH}"
 set_monitors "DP-1 eDP-1" "DP-1 eDP-1"
-HYPR_WORKSPACES=external12empty3 HYPR_ACTIVE_WS=3 run_lid
+HYPR_WORKSPACES=external1empty23 HYPR_ACTIVE_WS=1 run_lid
 
-assert_contains "keyword workspace 2\\,monitor:DP-1\\,persistent:true"
-assert_contains "moveworkspacetomonitor 2 DP-1"
-assert_contains "moveworkspacetomonitor 3 DP-1"
+assert_contains "keyword workspace 1\\,monitor:DP-1\\,persistent:false"
+assert_contains "keyword workspace 2\\,monitor:DP-1\\,persistent:false"
+assert_not_contains "moveworkspacetomonitor 2 DP-1"
+assert_not_contains "moveworkspacetomonitor 3 DP-1"
 assert_contains "keyword workspace 3\\,monitor:DP-1\\,persistent:false"
-assert_not_contains "keyword workspace 3\\,monitor:DP-1\\,persistent:true"
 assert_not_contains "keyword monitor eDP-1\\,disable"
 assert_not_contains "dispatch dpms"
 assert_not_contains "keyword monitor DP-1\\,2560x1440"

@@ -22,10 +22,11 @@ This directory documents display, workspace, lid, and audio behavior for the Len
 ## Critical Invariants
 
 - Docked lid-closed mode keeps `eDP-1` logically active with its backlight at zero.
-- Protected workspaces move to `DP-1` while `eDP-1` remains available for unplug recovery.
+- Active and occupied workspaces move to `DP-1` while `eDP-1` remains available for unplug recovery.
 - Workspace rules for `1` and `2` follow the single active display; workspace `3` remains dynamic unless active or occupied.
 - Docked lid-open mode keeps existing `DP-1` workspaces there and creates the next numbered workspace on `eDP-1`.
 - The docked-open workspace is `max(non-empty DP-1 workspace IDs) + 1` and is non-persistent.
+- All workspace rules are non-persistent, so empty inactive workspaces disappear.
 - The previously active workspace is restored after every transition.
 - HDMI mirror mode keeps `eDP-1` as the source and mirrors it to `HDMI-A-1`.
 - No transition restarts Waybar or another user application.
