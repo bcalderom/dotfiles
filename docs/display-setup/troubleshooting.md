@@ -33,7 +33,7 @@ systemctl --user status hypr-lid.service
 - Run `~/.config/hypr/scripts/lid.sh closed` manually.
 - Check the service journal for unstable alternating topology entries.
 
-## Lid Closed But Internal Display Stays Enabled
+## Lid Closed And Internal Display Stays Enabled
 
 ```bash
 grep -q closed /proc/acpi/button/lid/*/state && echo closed || echo open
@@ -43,7 +43,13 @@ hyprctl workspacerules
 journalctl --user -u hypr-lid.service -b
 ```
 
-The coordinator intentionally leaves `eDP-1` enabled until `DP-1` is active. If `DP-1` never activates, fix that output first instead of forcing the internal display off.
+The coordinator intentionally keeps `eDP-1` logically enabled when docked and closed. This avoids the upstream Aquamarine/i915 failure path where a disabled internal panel cannot reliably be re-enabled after `DP-1` disappears. Its `intel_backlight` brightness should be zero while closed.
+
+Verify the physical backlight state with:
+
+```bash
+cat /sys/class/backlight/intel_backlight/actual_brightness
+```
 
 ## Laptop Screen Black After Unplug
 
@@ -54,7 +60,9 @@ hyprctl workspaces
 hyprctl activeworkspace
 ```
 
-Expected: `eDP-1` is active with DPMS on and the last stable active workspace is restored. Confirm `hypr-lid.service` is running so future topology changes reconcile automatically.
+Expected: `eDP-1` is active and the last stable active workspace is restored. Confirm `hypr-lid.service` is running so future topology changes reconcile automatically.
+
+If `eDP-1` is still inactive, inspect the service journal. The coordinator allows one delayed `hyprctl reload` per stable topology, then backs off instead of repeatedly triggering live modesets.
 
 ## Laptop Screen Black While Docked
 

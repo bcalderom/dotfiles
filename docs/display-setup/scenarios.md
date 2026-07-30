@@ -6,9 +6,10 @@ Trigger: `DP-1` connected and lid closed.
 
 - `DP-1` is active at `2560x1440@120.01Hz`.
 - HDMI is disabled when it is also connected.
-- Existing workspaces and workspace rules move to `DP-1`.
+- Protected workspaces and workspace rules move to `DP-1`.
 - The active workspace is restored.
-- `eDP-1` is disabled after the workspace moves finish.
+- `eDP-1` stays logically active as a hidden fallback output.
+- The `intel_backlight` brightness is saved and set to zero.
 
 Verify with:
 
@@ -24,18 +25,20 @@ hyprctl activeworkspace
 Trigger: `DP-1` connected and lid open.
 
 - `DP-1` and `eDP-1` are active.
-- `eDP-1` has DPMS on.
 - Existing non-empty `DP-1` workspaces remain there.
 - `max(non-empty DP-1 workspace IDs) + 1` is placed on `eDP-1` with `persistent:false`.
 - The previously active workspace remains active.
+- The saved internal-panel brightness is restored.
 
 ## Laptop Only
 
 Trigger: lid open with no external output.
 
-- `eDP-1` is active at its preferred mode with DPMS on.
-- Existing workspaces and rules `1`, `2`, and `3` target `eDP-1`.
+- `eDP-1` is active at its preferred mode.
+- Protected workspaces and rules `1` and `2` target `eDP-1`.
 - Unplug recovery restores the last stable active workspace rather than an empty auto-created workspace.
+
+The coordinator moves and restores workspaces `1`, `2`, the active workspace, and occupied workspaces. Only `1`, `2`, and occupied workspaces use `persistent:true`; workspace `3` and other empty workspaces use `persistent:false`.
 
 Closing the lid without an external monitor does not create a display transition; normal suspend or lock policy remains responsible.
 

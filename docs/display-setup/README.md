@@ -21,9 +21,9 @@ This directory documents display, workspace, lid, and audio behavior for the Len
 
 ## Critical Invariants
 
-- Docked lid-closed mode ends with only `DP-1` enabled.
-- Workspaces move to an active destination before `eDP-1` is disabled.
-- Workspace rules for `1`, `2`, and `3` follow the single active display.
+- Docked lid-closed mode keeps `eDP-1` logically active with its backlight at zero.
+- Protected workspaces move to `DP-1` while `eDP-1` remains available for unplug recovery.
+- Workspace rules for `1` and `2` follow the single active display; workspace `3` remains dynamic unless active or occupied.
 - Docked lid-open mode keeps existing `DP-1` workspaces there and creates the next numbered workspace on `eDP-1`.
 - The docked-open workspace is `max(non-empty DP-1 workspace IDs) + 1` and is non-persistent.
 - The previously active workspace is restored after every transition.

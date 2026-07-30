@@ -18,8 +18,8 @@ Confirm the coordinator is active and no `kanshi` process is running.
 
 ## Scenario Smoke Tests
 
-- Laptop-only: disconnect external displays and confirm `eDP-1` is enabled with DPMS on.
-- Docked: connect `DP-1`, close the lid, and confirm workspaces move before `eDP-1` is disabled.
+- Laptop-only: disconnect external displays and confirm `eDP-1` is enabled.
+- Docked: connect `DP-1`, close the lid, and confirm protected workspaces move while `eDP-1` remains logically active with `actual_brightness` at zero.
 - Docked lid-open: open the lid and confirm both displays are enabled with the next numbered workspace on `eDP-1`.
 - Unplug recovery: unplug `DP-1` and confirm workspaces and focus return to `eDP-1`.
 - HDMI mirror: connect HDMI without `DP-1` and confirm it mirrors `eDP-1`.

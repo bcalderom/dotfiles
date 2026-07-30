@@ -16,14 +16,21 @@ mkdir -p "${MOCK_BIN}"
 HYPRCTL_LOG="${TMPDIR}/hyprctl.log"
 ACTIVE_MONITORS_PATH="${TMPDIR}/active-monitors"
 ALL_MONITORS_PATH="${TMPDIR}/all-monitors"
+MONITOR_ATTEMPTS_PATH="${TMPDIR}/monitor-attempts"
 LID_STATE_PATH="${TMPDIR}/lid-state"
 HYPR_LID_ACTIVE_WORKSPACE_FILE="${TMPDIR}/active-workspace"
+HYPR_LID_RECOVERY_FILE="${TMPDIR}/recovery"
+HYPR_LID_BACKLIGHT_STATE_FILE="${TMPDIR}/backlight-state"
+BACKLIGHT_VALUE_PATH="${TMPDIR}/backlight-value"
+BACKLIGHT_LOG="${TMPDIR}/backlight.log"
 AUDIO_ROUTE_LOG="${TMPDIR}/audio-route.log"
 : > "${AUDIO_ROUTE_LOG}"
 HYPR_LID_AUDIO_ROUTE_SCRIPT="${TMPDIR}/audio-route"
 : > "${HYPRCTL_LOG}"
 : > "${LID_STATE_PATH}"
-export HYPRCTL_LOG ACTIVE_MONITORS_PATH ALL_MONITORS_PATH LID_STATE_PATH HYPR_LID_ACTIVE_WORKSPACE_FILE AUDIO_ROUTE_LOG HYPR_LID_AUDIO_ROUTE_SCRIPT
+printf '100\n' > "${BACKLIGHT_VALUE_PATH}"
+: > "${BACKLIGHT_LOG}"
+export HYPRCTL_LOG ACTIVE_MONITORS_PATH ALL_MONITORS_PATH MONITOR_ATTEMPTS_PATH LID_STATE_PATH HYPR_LID_ACTIVE_WORKSPACE_FILE HYPR_LID_RECOVERY_FILE HYPR_LID_BACKLIGHT_STATE_FILE BACKLIGHT_VALUE_PATH BACKLIGHT_LOG AUDIO_ROUTE_LOG HYPR_LID_AUDIO_ROUTE_SCRIPT
 
 cat > "${HYPR_LID_AUDIO_ROUTE_SCRIPT}" <<'EOF'
 #!/usr/bin/env bash
@@ -56,6 +63,18 @@ set_monitor_state() {
   mv "${tmp}" "${ACTIVE_MONITORS_PATH}"
 }
 
+maybe_skip_monitor_enable() {
+  local monitor="$1"
+  local marker="${MONITOR_ATTEMPTS_PATH}.${monitor}"
+
+  if [[ "${HYPR_MONITOR_FALSE_SUCCESS_ONCE:-}" == "${monitor}" && ! -e "${marker}" ]]; then
+    touch "${marker}"
+    return 0
+  fi
+
+  return 1
+}
+
 ws() { printf 'workspace ID %s (%s) on monitor %s:\n\twindows: %s\n' "$1" "$1" "$2" "$3"; }
 
 case "${1:-}" in
@@ -72,6 +91,7 @@ case "${1:-}" in
   workspaces)
     case "${HYPR_WORKSPACES:-external12}" in
       external12) ws 1 DP-1 1; ws 2 DP-1 1 ;;
+      external12empty3) ws 1 DP-1 1; ws 2 DP-1 1; ws 3 DP-1 0 ;;
       external123) ws 1 DP-1 1; ws 2 DP-1 1; ws 3 DP-1 1 ;;
       both12auto4) ws 1 DP-1 1; ws 2 DP-1 1; ws 4 eDP-1 0 ;;
       internal12) ws 1 eDP-1 1; ws 2 eDP-1 1 ;;
@@ -84,13 +104,30 @@ case "${1:-}" in
       if [[ "${3#*,}" == "disable" ]]; then
         set_monitor_state "${monitor}" 0
       else
+        maybe_skip_monitor_enable "${monitor}" && exit 0
         set_monitor_state "${monitor}" 1
       fi
     fi
     ;;
+  reload)
+    [[ -n "${HYPR_RELOAD_RECOVERS:-}" ]] && set_monitor_state "${HYPR_RELOAD_RECOVERS}" 1
+    ;;
 esac
 EOF
 chmod +x "${MOCK_BIN}/hyprctl"
+
+cat > "${MOCK_BIN}/brightnessctl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%q ' "$0" "$@" >> "${BACKLIGHT_LOG}"
+printf '\n' >> "${BACKLIGHT_LOG}"
+operation=""
+for arg in "$@"; do
+  if [[ "${operation}" == "set" ]]; then printf '%s\n' "${arg}" > "${BACKLIGHT_VALUE_PATH}"; exit 0; fi
+  case "${arg}" in get) cat "${BACKLIGHT_VALUE_PATH}"; exit 0 ;; set) operation="set" ;; esac
+done
+EOF
+chmod +x "${MOCK_BIN}/brightnessctl"
 
 run_lid() { PATH="${MOCK_BIN}:${PATH}" bash "${LID_SCRIPT}" "$@"; }
 
@@ -125,18 +162,22 @@ assert_no_process_restart() {
 echo "==> close lid with active dock"
 printf 'state: closed\n' > "${LID_STATE_PATH}"
 set_monitors "DP-1 eDP-1" "DP-1 eDP-1"
-run_lid
+HYPR_WORKSPACES=external12empty3 HYPR_ACTIVE_WS=3 run_lid
 
-assert_contains "keyword workspace 2\\,monitor:DP-1"
+assert_contains "keyword workspace 2\\,monitor:DP-1\\,persistent:true"
 assert_contains "moveworkspacetomonitor 2 DP-1"
+assert_contains "moveworkspacetomonitor 3 DP-1"
 assert_contains "keyword workspace 3\\,monitor:DP-1\\,persistent:false"
-assert_contains "keyword monitor eDP-1\\,disable"
-assert_before "moveworkspacetomonitor 2 DP-1" "keyword monitor eDP-1\\,disable"
+assert_not_contains "keyword workspace 3\\,monitor:DP-1\\,persistent:true"
+assert_not_contains "keyword monitor eDP-1\\,disable"
+assert_not_contains "dispatch dpms"
 assert_not_contains "keyword monitor DP-1\\,2560x1440"
 assert_no_process_restart
 [[ "$(grep -Fc route "${AUDIO_ROUTE_LOG}")" -eq 1 ]]
+[[ "$(cat "${BACKLIGHT_VALUE_PATH}")" -eq 0 ]]
+[[ "$(cat "${HYPR_LID_BACKLIGHT_STATE_FILE}")" -eq 100 ]]
 
-echo "==> activate dock before disabling internal display"
+echo "==> activate dock without disabling internal display"
 reset_log
 set_monitors "eDP-1 HDMI-A-1" "DP-1 eDP-1 HDMI-A-1"
 run_lid closed
@@ -144,7 +185,19 @@ run_lid closed
 assert_contains "keyword monitor DP-1\\,2560x1440@120.01\\,1920x0\\,1"
 assert_contains "keyword monitor HDMI-A-1\\,disable"
 assert_before "keyword monitor DP-1\\,2560x1440@120.01" "keyword monitor HDMI-A-1\\,disable"
-assert_before "keyword monitor DP-1\\,2560x1440@120.01" "keyword monitor eDP-1\\,disable"
+assert_not_contains "keyword monitor eDP-1\\,disable"
+[[ "$(cat "${HYPR_LID_BACKLIGHT_STATE_FILE}")" -eq 100 ]]
+
+echo "==> fail closed transition when dock activation is not observed"
+reset_log
+rm -f "${MONITOR_ATTEMPTS_PATH}.DP-1"
+set_monitors "eDP-1" "DP-1 eDP-1"
+if HYPR_MONITOR_FALSE_SUCCESS_ONCE=DP-1 run_lid closed; then
+  echo "Expected closed transition to fail when DP-1 stays inactive" >&2
+  exit 1
+fi
+
+assert_not_contains "moveworkspacetomonitor"
 
 echo "==> open lid while docked"
 reset_log
@@ -152,12 +205,14 @@ set_monitors "DP-1" "DP-1 eDP-1"
 HYPR_ACTIVE_WS=2 run_lid open
 
 assert_contains "keyword monitor eDP-1\\,preferred\\,0x0\\,1"
-assert_contains "dispatch dpms on eDP-1"
+assert_not_contains "dispatch dpms"
 assert_contains "keyword workspace 3\\,monitor:eDP-1\\,persistent:false"
 assert_contains "moveworkspacetomonitor 3 eDP-1"
 assert_contains "dispatch workspace 2"
 assert_not_contains "keyword monitor DP-1\\,2560x1440"
 assert_no_process_restart
+[[ "$(cat "${BACKLIGHT_VALUE_PATH}")" -eq 100 ]]
+[[ ! -e "${HYPR_LID_BACKLIGHT_STATE_FILE}" ]]
 
 echo "==> preserve external focus and allocate dynamic internal workspace"
 reset_log
@@ -174,6 +229,7 @@ set_monitors "DP-1 eDP-1" "DP-1 eDP-1"
 HYPR_WORKSPACES=both12auto4 HYPR_ACTIVE_WS=4 HYPR_ACTIVE_MONITOR=eDP-1 run_lid open
 
 assert_contains "keyword workspace 3\\,monitor:eDP-1\\,persistent:false"
+assert_contains "keyword workspace 4\\,monitor:eDP-1\\,persistent:false"
 assert_not_contains "dispatch workspace 4"
 
 echo "==> recover after unplug"
@@ -182,11 +238,23 @@ printf '2\n' > "${HYPR_LID_ACTIVE_WORKSPACE_FILE}"
 set_monitors "eDP-1" "eDP-1"
 HYPR_WORKSPACES=internal12auto4 HYPR_ACTIVE_WS=4 HYPR_ACTIVE_MONITOR=eDP-1 run_lid open
 
-assert_contains "dispatch dpms on eDP-1"
+assert_not_contains "dispatch dpms"
 assert_contains "keyword workspace 1\\,monitor:eDP-1"
-assert_contains "keyword workspace 3\\,monitor:eDP-1\\,persistent:false"
+assert_not_contains "keyword workspace 3\\,monitor:eDP-1\\,persistent:true"
+assert_contains "keyword workspace 4\\,monitor:eDP-1\\,persistent:false"
 assert_contains "dispatch workspace 2"
 assert_not_contains "dispatch workspace 4"
+
+echo "==> guarded reload only after eDP activation is observed failing"
+reset_log
+rm -f "${MONITOR_ATTEMPTS_PATH}.eDP-1" "${HYPR_LID_RECOVERY_FILE}"
+set_monitors "DP-1" "DP-1 eDP-1"
+HYPR_MONITOR_FALSE_SUCCESS_ONCE=eDP-1 HYPR_RELOAD_RECOVERS=eDP-1 HYPR_LID_RECOVERY_DELAY=0 run_lid open
+
+assert_contains "keyword monitor eDP-1\\,preferred\\,0x0\\,1"
+assert_contains "reload"
+assert_before "keyword monitor eDP-1\\,preferred" "reload"
+assert_contains "keyword workspace 3\\,monitor:eDP-1\\,persistent:false"
 
 echo "==> configure HDMI mirror after enabling internal display"
 reset_log

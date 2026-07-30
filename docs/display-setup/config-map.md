@@ -30,14 +30,18 @@ Files:
 - Require four identical samples, separated by 0.5 seconds, before handling a changed topology.
 - Reconcile stable states whose monitor or workspace arrangement is wrong.
 - Record the last stable active workspace for unplug recovery.
+- Retry failed stable states with capped backoff instead of marking them handled.
 
 `lid.sh` responsibilities:
 
 - Serialize transitions with a runtime lock.
 - Enable and verify the destination output before moving workspaces.
 - Move and rebind existing workspaces while preserving focus.
-- Disable `eDP-1` only after `DP-1` is active and workspace moves are complete.
+- Keep `eDP-1` logically active when docked and closed so unplug recovery does not depend on re-enabling a disabled panel.
+- Save the internal-panel brightness, set its backlight to zero while docked and closed, and restore it when opened.
 - Avoid modesetting outputs that are already active.
+- Avoid routine DPMS toggles on `eDP-1`.
+- Attempt at most one delayed `hyprctl reload` per stable topology when `eDP-1` remains inactive after a normal enable request.
 - Give `DP-1` priority over HDMI when both are connected.
 - Configure HDMI mirroring when `DP-1` is absent.
 
@@ -45,10 +49,12 @@ The script still accepts `open` or `closed` for manual recovery and can read the
 
 ## Workspace Rules
 
-- Lid closed with `DP-1`: all existing workspaces move to `DP-1`; rules `1`, `2`, and `3` target `DP-1`.
+- Lid closed with `DP-1`: protected workspaces move to `DP-1`; rules `1` and `2` target `DP-1`; `eDP-1` remains active as the fallback output.
 - Lid open with `DP-1`: existing external workspaces stay on `DP-1`; the next numbered workspace targets `eDP-1`.
-- Lid open without `DP-1`: all existing workspaces and rules `1`, `2`, and `3` target `eDP-1`.
-- Empty auto-created internal workspaces do not affect the docked-open workspace number.
+- Lid open without `DP-1`: protected workspaces and rules `1` and `2` target `eDP-1`.
+- Protected workspaces are `1`, `2`, the active workspace, and occupied workspaces.
+- Only `1`, `2`, and occupied workspaces are persistent; an active but empty workspace remains nonpersistent.
+- Empty auto-created internal workspaces do not affect the docked-open workspace number and are demoted to `persistent:false`.
 
 ## Audio Routing
 
