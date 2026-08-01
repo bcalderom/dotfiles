@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# tds (Tmux Developer Session)
-# Usage: tds [--root PATH] [--depth N] [--layout NAME]
-# - --root PATH     Search root directory (default: current directory)
-# - --depth N       Search depth for subdirectories (default: 2)
-# - -l, --layout NAME  Layout to use (default: 3-panes-ide)
-# - -h, --help      Show usage
+# tds (Tmux Developer Session) - open a directory in a tmux dev layout.
+# Run 'tds --help' for usage.
+# Internal: tds --dirs --root PATH --depth N [-- QUERY...] prints the fzf list.
 
 set -euo pipefail
 
@@ -16,6 +13,8 @@ RIGHT_PERCENT="60"
 RIGHT_TOP_PERCENT="80"
 RIGHT_BOTTOM_PERCENT="20"
 DEBUG="false"
+DIRS_MODE="false"
+INCLUDE_ZOXIDE="true"
 
 usage() {
   cat <<EOF
@@ -23,10 +22,17 @@ Usage: tds [--root PATH] [--depth N] [--layout NAME]
 
 Options:
   --root PATH   Search root directory (default: current directory)
-  --depth N     Search depth for subdirectories (default: 2)
+  --depth N     Depth of the initial directory listing (default: 2).
+                Typing in fzf searches the whole tree at any depth.
   -l, --layout NAME   Layout to use (default: 3-panes-ide)
   --debug       Print tmux layout debug info
   -h, --help    Show this help
+
+The tmux session is renamed to oc-<directory>. If zoxide is installed,
+frecent directories are listed first and the selection is recorded.
+
+Picker keys:
+  enter: select · ctrl-d: enter dir · ctrl-u: go up · esc: cancel
 
 Layouts:
   3-panes-ide
@@ -62,83 +68,28 @@ require_apps() {
   fi
 }
 
-validate_percent() {
-  local value="$1"
-  local name="$2"
-
-  if [[ ! "${value}" =~ ^[0-9]+$ ]]; then
-    die "${name} must be an integer percentage."
-  fi
-
-  if ((value < 1 || value > 99)); then
-    die "${name} must be between 1 and 99."
-  fi
-}
-
 debug_log() {
   if [[ "${DEBUG}" == "true" ]]; then
     echo "DEBUG: $*" >&2
   fi
 }
 
-pane_size() {
-  tmux display-message -p -t "$1" '#{pane_width}x#{pane_height}' 2>/dev/null
-}
-
-window_size() {
-  tmux display-message -p -t "$1" '#{window_width}x#{window_height}' 2>/dev/null
-}
-
 escape_shell() {
   printf '%q' "$1"
 }
 
-split_pane() {
-  local target="$1"
-  local orientation="$2"
-  local percent="$3"
-  local pane
-  local pane_dims
-  local window_dims
-
-  pane_dims="$(pane_size "${target}")"
-  window_dims="$(window_size "${target}")"
-  debug_log "Splitting ${target} ${orientation} ${percent}% (pane ${pane_dims}, window ${window_dims})"
-
-  if ! pane="$(tmux split-window -t "${target}" "${orientation}" -p "${percent}" -P -F '#{pane_id}' -c "${DIR}")"; then
-    window_dims="$(window_size "${target}")"
-    pane_dims="$(pane_size "${target}")"
-    debug_log "Split failed for ${target} (pane ${pane_dims}, window ${window_dims})"
-    echo "Window too small for requested layout. Resize and retry." >&2
-    exit 1
-  fi
-
-  printf '%s' "${pane}"
-}
-
-require_apps tmux fzf opencode
-
-if [[ -z "${TMUX:-}" ]]; then
-  echo "tmux is not running. Launching tmux..." >&2
-  script_path="$(command -v tds 2>/dev/null || printf '%s' "$0")"
-  script_path_escaped="$(escape_shell "${script_path}")"
-  script_cmd="${script_path_escaped}"
-
-  for arg in "$@"; do
-    script_cmd+=" $(escape_shell "${arg}")"
-  done
-
-  if tmux has-session -t tds 2>/dev/null; then
-    exec tmux attach -t tds
-  fi
-
-  tmux new-session -d -s tds -n tds
-  tmux send-keys -t "tds:tds" "${script_cmd}" C-m
-  exec tmux attach -t tds
-fi
+ORIG_ARGS=("$@")
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+  --dirs)
+    DIRS_MODE="true"
+    shift
+    ;;
+  --no-zoxide)
+    INCLUDE_ZOXIDE="false"
+    shift
+    ;;
   --root)
     ROOT="${2:-}"
     shift 2
@@ -160,17 +111,23 @@ while [[ $# -gt 0 ]]; do
     ;;
   --debug)
     DEBUG="true"
-    shift 1
+    shift
     ;;
   -h | --help)
     usage
     exit 0
+    ;;
+  --)
+    shift
+    break
     ;;
   *)
     die "Unknown argument: $1"
     ;;
   esac
 done
+
+QUERY=("$@")
 
 if [[ -z "${ROOT}" ]]; then
   die "--root cannot be empty."
@@ -184,43 +141,109 @@ if [[ ! "${DEPTH}" =~ ^[0-9]+$ ]]; then
   die "--depth must be a non-negative integer."
 fi
 
+if have fd; then
+  FD_CMD="fd"
+elif have fdfind; then
+  FD_CMD="fdfind"
+else
+  die "Missing required tool: fd"
+fi
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+# shellcheck source=dirs.sh
+. "$(dirname -- "${SELF}")/dirs.sh"
+
+if [[ "${DIRS_MODE}" == "true" ]]; then
+  print_dirs "${QUERY[@]}"
+  exit 0
+fi
+
+if ((${#QUERY[@]} > 0)); then
+  die "Unexpected positional arguments: ${QUERY[*]}"
+fi
+
 if [[ -z "${LAYOUT}" ]]; then
   die "--layout cannot be empty."
 fi
 
-case "${LAYOUT}" in
-3-panes-ide)
-  require_apps nvim
-  validate_percent "${LEFT_PERCENT}" "LEFT_PERCENT"
-  validate_percent "${RIGHT_PERCENT}" "RIGHT_PERCENT"
-  validate_percent "${RIGHT_TOP_PERCENT}" "RIGHT_TOP_PERCENT"
-  validate_percent "${RIGHT_BOTTOM_PERCENT}" "RIGHT_BOTTOM_PERCENT"
+require_apps tmux fzf opencode
 
-  if ((LEFT_PERCENT + RIGHT_PERCENT != 100)); then
-    die "LEFT_PERCENT and RIGHT_PERCENT must sum to 100."
+# shellcheck source=layouts.sh
+. "$(dirname -- "${SELF}")/layouts.sh"
+
+if [[ -z "${TMUX:-}" ]]; then
+  echo "tmux is not running. Launching tmux..." >&2
+  script_path="$(command -v tds 2>/dev/null || printf '%s' "$0")"
+  script_path_escaped="$(escape_shell "${script_path}")"
+  script_cmd="${script_path_escaped}"
+
+  for arg in "${ORIG_ARGS[@]}"; do
+    script_cmd+=" $(escape_shell "${arg}")"
+  done
+
+  if tmux has-session -t tds 2>/dev/null; then
+    exec tmux attach -t tds
   fi
 
-  if ((RIGHT_TOP_PERCENT + RIGHT_BOTTOM_PERCENT != 100)); then
-    die "RIGHT_TOP_PERCENT and RIGHT_BOTTOM_PERCENT must sum to 100."
+  tmux new-session -d -s tds -n tds
+  tmux send-keys -t "tds:tds" "${script_cmd}" C-m
+  exec tmux attach -t tds
+fi
+
+validate_layout
+
+BASE_ROOT="${ROOT}"
+while :; do
+  DIRS_FLAGS=()
+  if [[ "${ROOT}" != "${BASE_ROOT}" ]]; then
+    DIRS_FLAGS+=(--no-zoxide)
   fi
-  ;;
-oc)
-  ;;
-*)
-  die "Unknown layout: ${LAYOUT}. Valid layouts: 3-panes-ide, oc"
-  ;;
-esac
+  RELOAD_CMD="$(escape_shell "${SELF}") --dirs ${DIRS_FLAGS[@]+"${DIRS_FLAGS[@]}"} --root $(escape_shell "${ROOT}") --depth ${DEPTH}"
 
-list_dirs() {
-  printf '%s\n' "${ROOT}"
-  find "${ROOT}" -maxdepth "${DEPTH}" -mindepth 1 \
-    \( -name .git -o -name node_modules -o -name .venv -o -name venv -o -name dist -o -name build -o -name .cache \) -prune -o \
-    -type d -print
-}
+  fzf_out="$(fzf --disabled \
+    --expect=ctrl-d,ctrl-u \
+    --prompt="> " \
+    --header="${ROOT}" \
+    --footer="enter: select · ctrl-d: enter dir · ctrl-u: go up · esc: cancel" \
+    --bind "start:reload:${RELOAD_CMD}" \
+    --bind "change:reload:sleep 0.1; ${RELOAD_CMD} -- {q} || true" \
+    </dev/null || true)"
 
-DIR="$(list_dirs | fzf --prompt="Select directory: " || true)"
-if [[ -z "${DIR}" ]]; then
-  exit 0
+  if [[ -z "${fzf_out}" ]]; then
+    exit 0
+  fi
+
+  key="$(head -n1 <<< "${fzf_out}")"
+  sel="$(tail -n1 <<< "${fzf_out}")"
+
+  if [[ -z "${sel}" ]]; then
+    continue
+  fi
+
+  case "${key}" in
+  ctrl-d)
+    if [[ -d "${sel}" ]]; then
+      ROOT="${sel}"
+    fi
+    ;;
+  ctrl-u)
+    if [[ "${ROOT}" != "${BASE_ROOT}" ]]; then
+      ROOT="$(dirname -- "${ROOT}")"
+    fi
+    ;;
+  *)
+    DIR="${sel}"
+    break
+    ;;
+  esac
+done
+
+if [[ ! -d "${DIR}" ]]; then
+  die "Selected directory not found: ${DIR}"
+fi
+
+if have zoxide; then
+  zoxide add "${DIR}" 2>/dev/null || true
 fi
 
 SESSION_NAME="$(tmux display-message -p '#{session_name}')"
@@ -228,58 +251,22 @@ WINDOW_ID="$(tmux display-message -p '#{window_id}')"
 CURRENT_PANE_ID="$(tmux display-message -p '#{pane_id}')"
 WINDOW_PANES="$(tmux display-message -p '#{window_panes}')"
 
+NEW_SESSION_BASE="$(basename -- "${DIR}")"
+NEW_SESSION="oc-${NEW_SESSION_BASE//[.:]/-}"
+if [[ "${SESSION_NAME}" != "${NEW_SESSION}" ]]; then
+  candidate="${NEW_SESSION}"
+  n=2
+  while tmux has-session -t "${candidate}" 2>/dev/null; do
+    candidate="${NEW_SESSION}-$((n++))"
+  done
+  debug_log "Renaming session ${SESSION_NAME} to ${candidate}"
+  tmux rename-session -t "${SESSION_NAME}" "${candidate}"
+fi
+
 if [[ "${DEBUG}" == "true" ]]; then
   debug_log "Session ${SESSION_NAME}, window ${WINDOW_ID}, panes ${WINDOW_PANES}"
   debug_log "Window size $(window_size "${CURRENT_PANE_ID}")"
   debug_log "Current pane size $(pane_size "${CURRENT_PANE_ID}")"
 fi
 
-layout_3_panes_ide() {
-  local left_pane="${CURRENT_PANE_ID}"
-  local right_pane
-  local bottom_right_pane
-  local top_right_pane
-  local dir_escaped
-
-  if [[ "${WINDOW_PANES}" -gt 1 ]]; then
-    tmux kill-pane -a -t "${left_pane}"
-  fi
-
-  right_pane="$(split_pane "${left_pane}" -h "${RIGHT_PERCENT}")"
-  bottom_right_pane="$(split_pane "${right_pane}" -v "${RIGHT_BOTTOM_PERCENT}")"
-  top_right_pane="${right_pane}"
-  dir_escaped="$(escape_shell "${DIR}")"
-
-  tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${left_pane}" "opencode" C-m
-
-  tmux send-keys -t "${top_right_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${top_right_pane}" "nvim -c \"Telescope find_files\"" C-m
-
-  tmux send-keys -t "${bottom_right_pane}" "cd -- ${dir_escaped}" C-m
-
-  tmux select-pane -t "${left_pane}"
-}
-
-layout_oc() {
-  local left_pane="${CURRENT_PANE_ID}"
-  local dir_escaped
-
-  if [[ "${WINDOW_PANES}" -gt 1 ]]; then
-    tmux kill-pane -a -t "${left_pane}"
-  fi
-
-  dir_escaped="$(escape_shell "${DIR}")"
-  tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${left_pane}" "opencode" C-m
-  tmux select-pane -t "${left_pane}"
-}
-
-case "${LAYOUT}" in
-3-panes-ide)
-  layout_3_panes_ide
-  ;;
-oc)
-  layout_oc
-  ;;
-esac
+apply_layout
