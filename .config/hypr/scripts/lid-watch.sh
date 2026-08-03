@@ -30,6 +30,7 @@ record_active_workspace() {
 ensure_hyprland_env() {
   local instance
   command -v hyprctl >/dev/null 2>&1 || return 1
+  command -v jq >/dev/null 2>&1 || return 1
   if hyprctl monitors >/dev/null 2>&1; then return 0; fi
   instance="$(env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY hyprctl instances 2>/dev/null | awk '
     /^instance / { signature = $2; sub(/:$/, "", signature) }
@@ -79,12 +80,13 @@ read_watch_state() {
 }
 
 workspace_rule_mismatch() {
-  local workspace="$1" monitor="$2" rules compact
+  local workspace="$1" monitor="$2" rules
   ensure_hyprland_env || return 1
   rules="$(hyprctl -j workspacerules 2>/dev/null || true)"
   [ -n "$rules" ] || return 1
-  compact="$(printf '%s' "$rules" | tr -d '[:space:]')"
-  case "$compact" in *"\"workspaceString\":\"${workspace}\",\"monitor\":\"${monitor}\""*) return 1 ;; *) return 0 ;; esac
+  if printf '%s' "$rules" | jq -e --arg workspace "$workspace" --arg monitor "$monitor" \
+    'any(.[]; .workspaceString == $workspace and .monitor == $monitor and .persistent == false and (.enabled // true))' >/dev/null 2>&1; then return 1; fi
+  return 0
 }
 
 workspace_location_mismatch() {
@@ -123,7 +125,7 @@ needs_reconcile() {
   local internal_workspace
   case "$1" in
     closed\|external:1\|internal:*)
-      case "$1" in *\|internal:0*) return 0 ;; esac
+      case "$1" in *\|internal:1*) return 0 ;; esac
       workspace_mismatch 1 "$LID_EXTERNAL_OUTPUT" && return 0
       workspace_mismatch 2 "$LID_EXTERNAL_OUTPUT" && return 0
       ;;

@@ -166,10 +166,12 @@ HYPR_WORKSPACES=external1empty23 HYPR_ACTIVE_WS=1 run_lid
 
 assert_contains "keyword workspace 1\\,monitor:DP-1\\,persistent:false"
 assert_contains "keyword workspace 2\\,monitor:DP-1\\,persistent:false"
+assert_contains "keyword workspace 10\\,monitor:DP-1\\,persistent:false"
 assert_not_contains "moveworkspacetomonitor 2 DP-1"
 assert_not_contains "moveworkspacetomonitor 3 DP-1"
 assert_contains "keyword workspace 3\\,monitor:DP-1\\,persistent:false"
-assert_not_contains "keyword monitor eDP-1\\,disable"
+assert_contains "keyword monitor eDP-1\\,disable"
+assert_before "moveworkspacetomonitor 1 DP-1" "keyword monitor eDP-1\\,disable"
 assert_not_contains "dispatch dpms"
 assert_not_contains "keyword monitor DP-1\\,2560x1440"
 assert_no_process_restart
@@ -177,7 +179,7 @@ assert_no_process_restart
 [[ "$(cat "${BACKLIGHT_VALUE_PATH}")" -eq 0 ]]
 [[ "$(cat "${HYPR_LID_BACKLIGHT_STATE_FILE}")" -eq 100 ]]
 
-echo "==> activate dock without disabling internal display"
+echo "==> activate dock before disabling internal display"
 reset_log
 set_monitors "eDP-1 HDMI-A-1" "DP-1 eDP-1 HDMI-A-1"
 run_lid closed
@@ -185,7 +187,7 @@ run_lid closed
 assert_contains "keyword monitor DP-1\\,2560x1440@120.01\\,1920x0\\,1"
 assert_contains "keyword monitor HDMI-A-1\\,disable"
 assert_before "keyword monitor DP-1\\,2560x1440@120.01" "keyword monitor HDMI-A-1\\,disable"
-assert_not_contains "keyword monitor eDP-1\\,disable"
+assert_contains "keyword monitor eDP-1\\,disable"
 [[ "$(cat "${HYPR_LID_BACKLIGHT_STATE_FILE}")" -eq 100 ]]
 
 echo "==> fail closed transition when dock activation is not observed"
@@ -229,7 +231,7 @@ set_monitors "DP-1 eDP-1" "DP-1 eDP-1"
 HYPR_WORKSPACES=both12auto4 HYPR_ACTIVE_WS=4 HYPR_ACTIVE_MONITOR=eDP-1 run_lid open
 
 assert_contains "keyword workspace 3\\,monitor:eDP-1\\,persistent:false"
-assert_contains "keyword workspace 4\\,monitor:eDP-1\\,persistent:false"
+assert_contains "keyword workspace 4\\,monitor:DP-1\\,persistent:false"
 assert_not_contains "dispatch workspace 4"
 
 echo "==> recover after unplug"
@@ -245,16 +247,22 @@ assert_contains "keyword workspace 4\\,monitor:eDP-1\\,persistent:false"
 assert_contains "dispatch workspace 2"
 assert_not_contains "dispatch workspace 4"
 
-echo "==> guarded reload only after eDP activation is observed failing"
+echo "==> do not reload while DP-1 remains usable"
 reset_log
 rm -f "${MONITOR_ATTEMPTS_PATH}.eDP-1" "${HYPR_LID_RECOVERY_FILE}"
 set_monitors "DP-1" "DP-1 eDP-1"
-HYPR_MONITOR_FALSE_SUCCESS_ONCE=eDP-1 HYPR_RELOAD_RECOVERS=eDP-1 HYPR_LID_RECOVERY_DELAY=0 run_lid open
+if HYPR_MONITOR_FALSE_SUCCESS_ONCE=eDP-1 HYPR_RELOAD_RECOVERS=eDP-1 HYPR_LID_RECOVERY_DELAY=0 run_lid open; then exit 1; fi
+assert_not_contains "reload"
 
+echo "==> guarded reload when no usable output remains"
+reset_log
+rm -f "${MONITOR_ATTEMPTS_PATH}.eDP-1" "${HYPR_LID_RECOVERY_FILE}"
+set_monitors "" "eDP-1"
+HYPR_MONITOR_FALSE_SUCCESS_ONCE=eDP-1 HYPR_RELOAD_RECOVERS=eDP-1 HYPR_LID_RECOVERY_DELAY=0 run_lid open
 assert_contains "keyword monitor eDP-1\\,preferred\\,0x0\\,1"
 assert_contains "reload"
 assert_before "keyword monitor eDP-1\\,preferred" "reload"
-assert_contains "keyword workspace 3\\,monitor:eDP-1\\,persistent:false"
+assert_contains "keyword workspace 1\\,monitor:eDP-1\\,persistent:false"
 
 echo "==> configure HDMI mirror after enabling internal display"
 reset_log

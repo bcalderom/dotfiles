@@ -38,7 +38,7 @@ Force closed-lid correction:
 ~/.config/hypr/scripts/lid.sh closed
 ```
 
-Expected with `DP-1` connected: active and occupied workspaces are on `DP-1`, empty inactive workspaces are absent, focus is preserved, and `eDP-1` remains logically active with its backlight set to zero.
+Expected with `DP-1` connected: active and occupied workspaces are on `DP-1`, empty inactive workspaces are absent, focus is preserved, and `eDP-1` is disabled after its brightness is saved.
 
 Force open-lid correction:
 
@@ -50,7 +50,7 @@ Expected with `DP-1` connected: both outputs are enabled, the saved internal bri
 
 Expected without `DP-1`: `eDP-1` is enabled and existing workspaces return to it. If HDMI is connected, `HDMI-A-1` mirrors `eDP-1`.
 
-The handler may attempt one delayed `hyprctl reload` when `eDP-1` remains inactive after an ordinary enable request. Repeated reloads are intentionally avoided because live modesets can trigger the upstream Aquamarine page-flip regression.
+The handler does not reload Hyprland when `DP-1` remains usable. If no usable output remains, it may attempt one delayed `hyprctl reload` when `eDP-1` remains inactive after an ordinary enable request. Repeated reloads are intentionally avoided because live modesets can trigger the upstream Aquamarine page-flip regression.
 
 ## Validate A Correction
 

@@ -93,14 +93,15 @@ enable_internal_once() {
 }
 
 enable_internal() {
-  local key="$1"
-  enable_internal_once && return 0
+  local key="$1" allow_reload="${2:-1}"
+  enable_internal_once && { rm -f "$RECOVERY_FILE"; return 0; }
+  [ "$allow_reload" -eq 1 ] || return 1
   reload_already_tried "$key" && return 1
   mark_reload_tried "$key"
   log "internal output still inactive; trying one delayed Hyprland reload for $key"
   sleep "$RECOVERY_DELAY"
   hyprctl_quiet reload || return 1
-  enable_internal_once
+  enable_internal_once && { rm -f "$RECOVERY_FILE"; return 0; }; return 1
 }
 
 disable_hdmi() {
@@ -134,6 +135,7 @@ backlight_on() {
 }
 
 active_workspace() { hyprctl_run activeworkspace 2>/dev/null | awk '/^workspace ID/ { print $3; exit }'; }
+active_workspace_on_monitor() { monitors_active | awk -v monitor="$1" '$1 == "Monitor" { current = $2 } current == monitor && $1 == "active" && $2 == "workspace:" { print $3; exit }'; }
 recorded_workspace() { [ -f "$ACTIVE_WORKSPACE_FILE" ] && awk 'NR == 1 && $1 ~ /^[0-9]+$/ { print $1; exit }' "$ACTIVE_WORKSPACE_FILE" 2>/dev/null; }
 
 workspace_ids() {
@@ -174,8 +176,6 @@ workspace_on_monitor() {
   [ "$(workspace_monitor "$1")" = "$2" ]
 }
 
-next_workspace_after_monitor() { workspace_ids_on_monitor "$1" | awk 'max < $1 { max = $1 } END { print max + 1 }'; }
-
 next_docked_open_workspace() {
   { printf '%s\n' 1 2; workspace_ids_on_monitor_with_windows "$EXTERNAL"; } |
     awk 'max < $1 { max = $1 } END { print max + 1 }'
@@ -192,15 +192,15 @@ movable_external_workspace_ids() {
 }
 
 bind_nonpersistent_workspace() { hyprctl_quiet keyword workspace "$1,monitor:$2,persistent:false" || true; }
+bind_numbered_workspaces() { local workspace; for workspace in {1..10}; do bind_nonpersistent_workspace "$workspace" "$1"; done; }
 move_workspace() { hyprctl_quiet dispatch moveworkspacetomonitor "$1" "$2" || true; }
 restore_workspace() { [ -n "$1" ] && hyprctl_quiet dispatch workspace "$1" || true; }
 
 demote_retired_workspaces() {
-  local protected_file="$1" workspace monitor
+  local protected_file="$1" target="$2" workspace
   workspace_ids | while IFS= read -r workspace; do
     grep -qx "$workspace" "$protected_file" && continue
-    monitor="$(workspace_monitor "$workspace")"
-    [ -n "$monitor" ] && bind_nonpersistent_workspace "$workspace" "$monitor"
+    bind_nonpersistent_workspace "$workspace" "$target"
   done
 }
 
@@ -208,27 +208,24 @@ move_main_workspaces() {
   local target="$1" current_ws="${2:-}" protected_file
   protected_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-protected.XXXXXX")" || return 1
   movable_workspace_ids "$current_ws" > "$protected_file"
-  bind_nonpersistent_workspace 1 "$target"
-  bind_nonpersistent_workspace 2 "$target"
+  bind_numbered_workspaces "$target"
   while IFS= read -r workspace; do bind_nonpersistent_workspace "$workspace" "$target"; done < "$protected_file"
-  demote_retired_workspaces "$protected_file"
+  demote_retired_workspaces "$protected_file" "$target"
   while IFS= read -r workspace; do move_workspace "$workspace" "$target"; done < "$protected_file"
   rm -f "$protected_file"
 }
 
 configure_docked_open_workspaces() {
   local current_ws="${1:-}" internal_ws="${2:-}" restore_current="${3:-0}" protected_file external_file
-  [ -n "$internal_ws" ] || internal_ws="$(next_workspace_after_monitor "$EXTERNAL")"
   protected_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-protected.XXXXXX")" || return 1
   external_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-external.XXXXXX")" || { rm -f "$protected_file"; return 1; }
 
   movable_external_workspace_ids "$current_ws" "$restore_current" > "$external_file"
   { cat "$external_file"; printf '%s\n' "$internal_ws"; } | awk '$1 ~ /^[0-9]+$/ && !seen[$1]++ { print $1 }' > "$protected_file"
-  bind_nonpersistent_workspace 1 "$EXTERNAL"
-  bind_nonpersistent_workspace 2 "$EXTERNAL"
+  bind_numbered_workspaces "$EXTERNAL"
   while IFS= read -r workspace; do bind_nonpersistent_workspace "$workspace" "$EXTERNAL"; done < "$external_file"
   bind_nonpersistent_workspace "$internal_ws" "$INTERNAL"
-  demote_retired_workspaces "$protected_file"
+  demote_retired_workspaces "$protected_file" "$EXTERNAL"
   while IFS= read -r workspace; do move_workspace "$workspace" "$EXTERNAL"; done < "$external_file"
   restore_workspace "$internal_ws"
   move_workspace "$internal_ws" "$INTERNAL"
@@ -241,15 +238,20 @@ transition_status=0
 case "$STATE" in
   closed|close)
     current_ws="$(active_workspace)"
+    if workspace_on_monitor "$current_ws" "$INTERNAL" && ! workspace_ids_with_windows | grep -qx "$current_ws"; then current_ws="$(active_workspace_on_monitor "$EXTERNAL")"; fi
     i=0
     while [ "$i" -lt 30 ]; do external_available && break; sleep 0.1; i=$((i + 1)); done
     if external_available; then
       if enable_external; then
-        enable_internal "$(topology_key)" || transition_status=1
         disable_hdmi
         move_main_workspaces "$EXTERNAL" "$current_ws"
         restore_workspace "$current_ws"
         backlight_off
+        if internal_available; then
+          hyprctl_quiet keyword monitor "$INTERNAL,disable" || transition_status=1
+          i=0; while internal_available && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
+          internal_available && transition_status=1
+        fi
         route_audio
       else
         transition_status=1
@@ -265,7 +267,7 @@ case "$STATE" in
     if external_available; then
       enable_external || exit 1
       disable_hdmi
-      enable_internal "$(topology_key)" || exit 1
+      enable_internal "$(topology_key)" 0 || exit 1
     elif hdmi_available; then
       enable_internal "$(topology_key)" || exit 1
       hyprctl_quiet keyword monitor "$HDMI,1920x1080@60,0x0,1,mirror,$INTERNAL" || true

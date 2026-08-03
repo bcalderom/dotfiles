@@ -37,11 +37,12 @@ Files:
 - Serialize transitions with a runtime lock.
 - Enable and verify the destination output before moving workspaces.
 - Move and rebind existing workspaces while preserving focus.
-- Keep `eDP-1` logically active when docked and closed so unplug recovery does not depend on re-enabling a disabled panel.
-- Save the internal-panel brightness, set its backlight to zero while docked and closed, and restore it when opened.
+- Save the internal-panel brightness and set its backlight to zero before disabling `eDP-1` when docked and closed.
+- Disable `eDP-1` only after `DP-1` is active, workspace migration completes, and focus is restored.
+- Restore the saved brightness after `eDP-1` is successfully enabled.
 - Avoid modesetting outputs that are already active.
 - Avoid routine DPMS toggles on `eDP-1`.
-- Attempt at most one delayed `hyprctl reload` per stable topology when `eDP-1` remains inactive after a normal enable request.
+- Avoid automatic reload while `DP-1` remains usable; permit one delayed reload only when no usable output remains.
 - Give `DP-1` priority over HDMI when both are connected.
 - Configure HDMI mirroring when `DP-1` is absent.
 
@@ -49,9 +50,9 @@ The script still accepts `open` or `closed` for manual recovery and can read the
 
 ## Workspace Rules
 
-- Lid closed with `DP-1`: active and occupied workspaces move to `DP-1`; rules `1` and `2` target `DP-1`; `eDP-1` remains active as the fallback output.
+- Lid closed with `DP-1`: active and occupied workspaces move to `DP-1`; nonpersistent rules `1-10` target `DP-1`; `eDP-1` is disabled.
 - Lid open with `DP-1`: existing external workspaces stay on `DP-1`; the next numbered workspace targets `eDP-1`.
-- Lid open without `DP-1`: active and occupied workspaces move to `eDP-1`; rules `1` and `2` target it for future use.
+- Lid open without `DP-1`: active and occupied workspaces move to `eDP-1`; nonpersistent rules `1-10` target it for future use.
 - All managed workspace rules use `persistent:false`.
 - Empty inactive workspaces disappear; each enabled monitor still has one active workspace as required by Hyprland.
 - Empty auto-created internal workspaces do not affect the docked-open workspace number and are demoted to `persistent:false`.

@@ -80,19 +80,19 @@ case "${1:-}" in
 
     case "$(cat "${RULE_STATE_PATH}")" in
       docked)
-        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"DP-1","persistent":false}]\n'
+        printf '[{"workspaceString":"1","enabled":true,"monitor":"DP-1","persistent":false},{"workspaceString":"2","enabled":true,"monitor":"DP-1","persistent":false},{"workspaceString":"3","enabled":true,"monitor":"DP-1","persistent":false}]\n'
         ;;
       docked-open)
-        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
+        printf '[{"workspaceString":"1","enabled":true,"monitor":"DP-1","persistent":false},{"workspaceString":"2","enabled":true,"monitor":"DP-1","persistent":false},{"workspaceString":"3","enabled":true,"monitor":"eDP-1","persistent":false}]\n'
         ;;
       wrong-auto)
-        printf '[{"workspaceString":"1","monitor":"DP-1"},{"workspaceString":"2","monitor":"DP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
+        printf '[{"workspaceString":"1","enabled":true,"monitor":"DP-1","persistent":false},{"workspaceString":"2","enabled":true,"monitor":"DP-1","persistent":false},{"workspaceString":"3","enabled":true,"monitor":"eDP-1","persistent":false}]\n'
         ;;
       laptop)
-        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
+        printf '[{"workspaceString":"1","enabled":true,"monitor":"eDP-1","persistent":false},{"workspaceString":"2","enabled":true,"monitor":"eDP-1","persistent":false},{"workspaceString":"3","enabled":true,"monitor":"eDP-1","persistent":false}]\n'
         ;;
       mirror)
-        printf '[{"workspaceString":"1","monitor":"eDP-1"},{"workspaceString":"2","monitor":"eDP-1"},{"workspaceString":"3","monitor":"eDP-1","persistent":false}]\n'
+        printf '[{"workspaceString":"1","enabled":true,"monitor":"eDP-1","persistent":false},{"workspaceString":"2","enabled":true,"monitor":"eDP-1","persistent":false},{"workspaceString":"3","enabled":true,"monitor":"eDP-1","persistent":false}]\n'
         ;;
     esac
     ;;
@@ -153,10 +153,10 @@ fi
 
 case "${lid_state}:${monitor_state}" in
   closed:both)
+    printf 'external\n' > "${MONITOR_STATE_PATH}"
     printf 'docked\n' > "${RULE_STATE_PATH}"
     ;;
   closed:external)
-    printf 'both\n' > "${MONITOR_STATE_PATH}"
     printf 'docked\n' > "${RULE_STATE_PATH}"
     ;;
   open:both)
@@ -219,7 +219,7 @@ watch_pid="$!"
 sleep 0.15
 printf 'laptop\n' > "${RULE_STATE_PATH}"
 wait "${watch_pid}"
-if [[ "$(grep -Fc 'closed both laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
+if [[ "$(grep -Fc 'closed external laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
   echo "Expected one stable-state mismatch reconciliation" >&2
   exit 1
 fi
