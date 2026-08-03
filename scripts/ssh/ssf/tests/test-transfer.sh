@@ -34,7 +34,7 @@ case "$prompt" in
     count=$((count + 1))
     printf '%s\n' "$count" > "${SSF_TEST_SOURCE_COUNT}"
     if [[ -n "${SSF_TEST_NAV_DIR:-}" && $count -eq 1 ]]; then
-      printf 'enter\0[D] %s\0' "${SSF_TEST_NAV_DIR}"
+      printf 'ctrl-d\0[D] %s\0' "${SSF_TEST_NAV_DIR}"
     elif [[ -n "${SSF_TEST_NAV_FILE:-}" ]]; then
       tr '\0' '\n' < "$input" > "${SSF_TEST_LAST_SOURCE_INPUT}"
       printf 'ctrl-a\0[F] %s\0' "${SSF_TEST_NAV_FILE}"
@@ -54,6 +54,19 @@ case "$prompt" in
   'directory mode> ')
     printf '%s\n' "${SSF_TEST_DIRECTORY_MODE}"$'\t'"selected directory mode"
     ;;
+  'next> ')
+    ncount=0
+    if [[ -n "${SSF_TEST_NEXT_COUNT:-}" ]]; then
+      [[ ! -f "$SSF_TEST_NEXT_COUNT" ]] || read -r ncount < "$SSF_TEST_NEXT_COUNT"
+      ncount=$((ncount + 1))
+      printf '%s\n' "$ncount" > "$SSF_TEST_NEXT_COUNT"
+    fi
+    if [[ "$ncount" -eq 1 && -n "${SSF_TEST_NEXT_FIRST:-}" ]]; then
+      printf '%s\t%s\n' "${SSF_TEST_NEXT_FIRST}" 'selected next action'
+    else
+      printf '%s\t%s\n' "${SSF_TEST_NEXT:-quit}" 'selected next action'
+    fi
+    ;;
   *)
     echo "Unexpected fzf prompt: $prompt" >&2
     exit 2
@@ -64,6 +77,11 @@ EOF
 cat > "$MOCK_BIN/scp" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${SSF_TEST_COMMAND_COUNT:-}" ]]; then
+  count=0
+  [[ ! -f "${SSF_TEST_COMMAND_COUNT}" ]] || read -r count < "${SSF_TEST_COMMAND_COUNT}"
+  printf '%s\n' "$((count + 1))" > "${SSF_TEST_COMMAND_COUNT}"
+fi
 printf '%s\0' "$@" > "${SSF_TEST_COMMAND_LOG}"
 EOF
 
@@ -72,7 +90,23 @@ cat > "$MOCK_BIN/rsync" <<'EOF'
 set -euo pipefail
 printf '%s\0' "$@" > "${SSF_TEST_COMMAND_LOG}"
 EOF
-chmod +x "$MOCK_BIN/fzf" "$MOCK_BIN/scp" "$MOCK_BIN/rsync"
+cat > "$MOCK_BIN/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ -z "${SSF_TEST_SSH_LOG:-}" ]] || printf '%s\n' "$*" > "${SSF_TEST_SSH_LOG}"
+EOF
+
+cat > "$MOCK_BIN/tmux" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ -z "${SSF_TEST_TMUX_LOG:-}" ]] || printf '%s\n' "$*" >> "${SSF_TEST_TMUX_LOG}"
+case "${1:-}" in
+  display-message) printf '%s\n' "${SSF_TEST_TMUX_SESSION:-}" ;;
+  has-session) exit 1 ;;
+esac
+exit 0
+EOF
+chmod +x "$MOCK_BIN/fzf" "$MOCK_BIN/scp" "$MOCK_BIN/rsync" "$MOCK_BIN/ssh" "$MOCK_BIN/tmux"
 
 assert_args() {
   local log="$1"
@@ -97,8 +131,13 @@ assert_args() {
 SOURCE_RECORDS="${TMPDIR}/source-records"
 SOURCE_COUNT="${TMPDIR}/source-count"
 COMMAND_LOG="${TMPDIR}/command-log"
+COMMAND_COUNT="${TMPDIR}/command-count"
 LAST_SOURCE_INPUT="${TMPDIR}/last-source-input"
 DESTINATION_INPUT="${TMPDIR}/destination-input"
+NEXT_COUNT="${TMPDIR}/next-count"
+SSH_LOG="${TMPDIR}/ssh-log"
+TMUX_LOG="${TMPDIR}/tmux-log"
+MAIN_LOG="${TMPDIR}/main-log"
 
 printf '[F] %s\0[F] %s\0' "$WORK/file one.txt" "$WORK/file-two.txt" > "$SOURCE_RECORDS"
 printf 'docs and files\n' | (
@@ -178,9 +217,70 @@ cancel_output="$(
   SSF_TEST_CANCEL_SOURCE=1 \
   SSF_TEST_SOURCE_COUNT="$SOURCE_COUNT" \
   SSF_TEST_COMMAND_LOG="$COMMAND_LOG" \
-  bash "$TRANSFER" scp demo boris example.test
+  bash "$TRANSFER" scp demo boris example.test || true
 )"
 [[ "$cancel_output" == *'Cancelled.'* ]] || { echo 'Expected cancellation message' >&2; exit 1; }
 [[ ! -e "$COMMAND_LOG" ]] || { echo 'Cancelled transfer must not call scp' >&2; exit 1; }
+
+printf '[F] %s\0[F] %s\0' "$WORK/file one.txt" "$WORK/file-two.txt" > "$SOURCE_RECORDS"
+
+rm -f "$SOURCE_COUNT" "$COMMAND_COUNT" "$NEXT_COUNT"
+printf 'first-path\nsecond-path\n' | (
+  cd "$WORK"
+  PATH="$MOCK_BIN:$PATH" \
+  SSF_TEST_DIRECTION=upload \
+  SSF_TEST_SOURCE_RECORDS="$SOURCE_RECORDS" \
+  SSF_TEST_SOURCE_COUNT="$SOURCE_COUNT" \
+  SSF_TEST_COMMAND_LOG="$COMMAND_LOG" \
+  SSF_TEST_COMMAND_COUNT="$COMMAND_COUNT" \
+  SSF_TEST_NEXT_COUNT="$NEXT_COUNT" \
+  SSF_TEST_NEXT_FIRST=again \
+  SSF_TEST_NEXT=quit \
+  bash "$TRANSFER" scp demo boris example.test
+) >/dev/null
+[[ "$(cat "$COMMAND_COUNT")" == 2 ]] || { echo 'Expected again to run two transfers' >&2; exit 1; }
+assert_args "$COMMAND_LOG" -r -- "$WORK/file one.txt" "$WORK/file-two.txt" 'demo:~/second-path'
+
+rm -f "$SOURCE_COUNT" "$SSH_LOG" "$TMUX_LOG"
+printf 'ssh-target\n' | (
+  cd "$WORK"
+  PATH="$MOCK_BIN:$PATH" \
+  TMUX='/tmp/ssf-test-tmux' \
+  SSF_TEST_DIRECTION=upload \
+  SSF_TEST_SOURCE_RECORDS="$SOURCE_RECORDS" \
+  SSF_TEST_SOURCE_COUNT="$SOURCE_COUNT" \
+  SSF_TEST_COMMAND_LOG="$COMMAND_LOG" \
+  SSF_TEST_NEXT=ssh \
+  SSF_TEST_SSH_LOG="$SSH_LOG" \
+  SSF_TEST_TMUX_LOG="$TMUX_LOG" \
+  SSF_TEST_TMUX_SESSION='scp-demo' \
+  bash "$TRANSFER" scp demo boris example.test
+) >/dev/null
+[[ "$(cat "$SSH_LOG")" == 'demo' ]] || { echo 'Expected post-action ssh to connect to demo' >&2; exit 1; }
+grep -F 'rename-window -- ssh-demo' "$TMUX_LOG" >/dev/null || { echo 'Expected window rename to ssh-demo' >&2; exit 1; }
+grep -F 'rename-session -t scp-demo ssh-demo' "$TMUX_LOG" >/dev/null || { echo 'Expected session rename to ssh-demo' >&2; exit 1; }
+
+MAIN_STUB="${TMPDIR}/ssf-main-stub"
+cat > "$MAIN_STUB" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'main menu invoked\n' > "${SSF_TEST_MAIN_LOG}"
+EOF
+chmod +x "$MAIN_STUB"
+
+rm -f "$SOURCE_COUNT" "$MAIN_LOG"
+printf 'menu-target\n' | (
+  cd "$WORK"
+  PATH="$MOCK_BIN:$PATH" \
+  SSF_MAIN_PATH="$MAIN_STUB" \
+  SSF_TEST_MAIN_LOG="$MAIN_LOG" \
+  SSF_TEST_DIRECTION=upload \
+  SSF_TEST_SOURCE_RECORDS="$SOURCE_RECORDS" \
+  SSF_TEST_SOURCE_COUNT="$SOURCE_COUNT" \
+  SSF_TEST_COMMAND_LOG="$COMMAND_LOG" \
+  SSF_TEST_NEXT=menu \
+  bash "$TRANSFER" scp demo boris example.test
+) >/dev/null
+[[ "$(cat "$MAIN_LOG")" == 'main menu invoked' ]] || { echo 'Expected post-action menu to invoke ssf main script' >&2; exit 1; }
 
 echo 'OK'

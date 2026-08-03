@@ -11,6 +11,7 @@ INITIAL_QUERY=""
 SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF_PATH")" && pwd)"
 SSF_TRANSFER_PATH="${SCRIPT_DIR}/ssf-transfer"
+export SSF_MAIN_PATH="$SELF_PATH"
 
 usage() {
   cat <<'EOF'
@@ -47,9 +48,11 @@ ensure_deps() {
 }
 
 [[ -f "${SCRIPT_DIR}/ssf-hosts" ]] || die "Missing helper: ${SCRIPT_DIR}/ssf-hosts"
+[[ -f "${SCRIPT_DIR}/ssf-tmux" ]] || die "Missing helper: ${SCRIPT_DIR}/ssf-tmux"
 [[ -f "${SCRIPT_DIR}/ssf-actions" ]] || die "Missing helper: ${SCRIPT_DIR}/ssf-actions"
 [[ -f "$SSF_TRANSFER_PATH" ]] || die "Missing helper: $SSF_TRANSFER_PATH"
 source "${SCRIPT_DIR}/ssf-hosts"
+source "${SCRIPT_DIR}/ssf-tmux"
 source "${SCRIPT_DIR}/ssf-actions"
 
 internal_mode() {

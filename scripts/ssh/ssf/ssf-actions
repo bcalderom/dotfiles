@@ -40,9 +40,13 @@ run_action() {
   local action="$1" alias="$2" host="$3" user="$4" cfg="$5" remote_cmd
   update_history "$alias"
   case "$action" in
-    enter|'') exec ssh "$alias" ;;
+    enter|'')
+      tmux_rename_window_safe "$(tmux_label_for ssh "$alias")"
+      tmux_rename_session_safe ssh "$alias"
+      exec ssh "$alias"
+      ;;
     ctrl-t)
-      if [[ -n "${TMUX:-}" ]] && need_cmd tmux; then tmux new-window -n "$alias" "ssh $alias"
+      if [[ -n "${TMUX:-}" ]] && need_cmd tmux; then tmux new-window -n "$(tmux_label_for ssh "$alias")" "ssh $alias"
       else exec ssh "$alias"
       fi
       ;;
@@ -62,8 +66,16 @@ run_action() {
       copy_remote_stdout "$alias" "$remote_cmd"
       ;;
     ctrl-p) port_test "$host" ;;
-    ctrl-s) exec bash "$SSF_TRANSFER_PATH" scp "$alias" "$user" "$host" ;;
-    ctrl-r) exec bash "$SSF_TRANSFER_PATH" rsync "$alias" "$user" "$host" ;;
+    ctrl-s)
+      tmux_rename_window_safe "$(tmux_label_for scp "$alias")"
+      tmux_rename_session_safe scp "$alias"
+      exec bash "$SSF_TRANSFER_PATH" scp "$alias" "$user" "$host"
+      ;;
+    ctrl-r)
+      tmux_rename_window_safe "$(tmux_label_for rsync "$alias")"
+      tmux_rename_session_safe rsync "$alias"
+      exec bash "$SSF_TRANSFER_PATH" rsync "$alias" "$user" "$host"
+      ;;
     *) die "Unknown action: $action" ;;
   esac
 }

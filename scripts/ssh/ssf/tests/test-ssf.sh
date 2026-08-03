@@ -220,4 +220,80 @@ if [[ "${ssh_args_no_sudo}" == *"-tt"* ]]; then
   exit 1
 fi
 
+cat > "${FAKE_BIN}/tmux" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ -z "${SSF_TEST_TMUX_LOG:-}" ]] || printf '%s\n' "$*" >> "${SSF_TEST_TMUX_LOG}"
+case "${1:-}" in
+  display-message) printf '%s\n' "${SSF_TEST_TMUX_SESSION:-}" ;;
+  has-session) exit 1 ;;
+esac
+exit 0
+EOF
+
+cat > "${FAKE_BIN}/fzf" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cat > /dev/null
+printf '%s\n%s\n' "${SSF_TEST_SELECTOR_KEY:-enter}" "${SSF_TEST_SELECTOR_ROW}"
+EOF
+chmod +x "${FAKE_BIN}/tmux" "${FAKE_BIN}/fzf"
+
+selector_row="$(printf "%s\n" "${rows}" | sed -n '2p')"
+TMUX_LOG="${TMPDIR}/tmux-log"
+: > "${TMUX_LOG}"
+
+PATH="${FAKE_BIN}:${PATH}" \
+TMUX='/tmp/ssf-test-tmux' \
+SSF_TEST_SELECTOR_ROW="${selector_row}" \
+SSF_TEST_TMUX_LOG="${TMUX_LOG}" \
+SSF_TEST_TMUX_SESSION='ssh-connect-0803-120000' \
+SSF_TEST_SSH_ARGS_FILE="${SSH_ARGS_FILE}" \
+bash "${SSF_SCRIPT}" -c "${CFG}" >/dev/null
+
+grep -F 'rename-window -- ssh-cenizas_back_pybackups' "${TMUX_LOG}" >/dev/null || {
+  echo 'Expected window rename to ssh-cenizas_back_pybackups' >&2
+  exit 1
+}
+grep -F 'rename-session -t ssh-connect-0803-120000 ssh-cenizas_back_pybackups' "${TMUX_LOG}" >/dev/null || {
+  echo 'Expected session rename to ssh-cenizas_back_pybackups' >&2
+  exit 1
+}
+if [[ "$(cat "${SSH_ARGS_FILE}")" != 'cenizas_back_pybackups' ]]; then
+  echo "Expected ssh to connect to cenizas_back_pybackups, got: $(cat "${SSH_ARGS_FILE}")" >&2
+  exit 1
+fi
+
+: > "${TMUX_LOG}"
+PATH="${FAKE_BIN}:${PATH}" \
+TMUX='/tmp/ssf-test-tmux' \
+SSF_TEST_SELECTOR_ROW="${selector_row}" \
+SSF_TEST_TMUX_LOG="${TMUX_LOG}" \
+SSF_TEST_TMUX_SESSION='terminal-local' \
+SSF_TEST_SSH_ARGS_FILE="${SSH_ARGS_FILE}" \
+bash "${SSF_SCRIPT}" -c "${CFG}" >/dev/null
+
+grep -F 'rename-window -- ssh-cenizas_back_pybackups' "${TMUX_LOG}" >/dev/null || {
+  echo 'Expected window rename even in a shared session' >&2
+  exit 1
+}
+if grep -F 'rename-session' "${TMUX_LOG}" >/dev/null; then
+  echo 'Shared session terminal-local must not be renamed' >&2
+  exit 1
+fi
+
+: > "${TMUX_LOG}"
+PATH="${FAKE_BIN}:${PATH}" \
+TMUX='/tmp/ssf-test-tmux' \
+SSF_TEST_SELECTOR_KEY='ctrl-t' \
+SSF_TEST_SELECTOR_ROW="${selector_row}" \
+SSF_TEST_TMUX_LOG="${TMUX_LOG}" \
+SSF_TEST_TMUX_SESSION='terminal-local' \
+bash "${SSF_SCRIPT}" -c "${CFG}" >/dev/null
+
+grep -F 'new-window -n ssh-cenizas_back_pybackups ssh cenizas_back_pybackups' "${TMUX_LOG}" >/dev/null || {
+  echo 'Expected ctrl-t to open a tmux window named ssh-cenizas_back_pybackups' >&2
+  exit 1
+}
+
 echo "OK"

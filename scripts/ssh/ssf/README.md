@@ -34,16 +34,38 @@ browser to select one destination directory. Remote paths are not browsed.
 Browser keys:
 
 ```text
-Enter       Open the highlighted directory or accept a file
+Enter       Accept the highlighted entry
 Tab         Mark or unmark multiple upload sources
 Ctrl-A      Accept marked entries, including directories
-Backspace   Move to the parent directory
+Ctrl-D      Open the highlighted directory
+Ctrl-U      Move to the parent directory
 Esc         Cancel the transfer
 ```
 
 When an upload source is a directory, rsync asks whether to copy the directory
 itself or only its contents. The latter preserves rsync's trailing-slash
 semantics by adding `/` to that source.
+
+## Session naming
+
+Inside tmux, the current window is renamed before connecting:
+`ssh-<alias>` for ssh, `scp-<alias>` / `rsync-<alias>` for transfers. The
+tmux session is renamed as well, but only when its current name already
+follows the ssf pattern (`ssh-*`, `scp-*`, `rsync-*`), so shared sessions
+are never renamed. A numeric suffix is added when the target session name
+is already taken.
+
+## After a transfer
+
+When an scp/rsync transfer finishes (or fails), a menu offers the next
+step:
+
+```text
+ssh     Connect to the host with ssh
+again   Run another transfer with the same tool
+menu    Back to the ssf main menu
+quit    Close this session
+```
 
 ## Dependencies
 

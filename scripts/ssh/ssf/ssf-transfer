@@ -2,9 +2,13 @@
 set -euo pipefail
 
 SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(cd -- "$(dirname -- "$SELF_PATH")" && pwd)"
 
 die() { echo "Error: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+[[ -f "${SELF_DIR}/ssf-tmux" ]] || die "Missing helper: ${SELF_DIR}/ssf-tmux"
+source "${SELF_DIR}/ssf-tmux"
 
 trim_path() {
   local value="$1"
@@ -102,14 +106,14 @@ browse_local() {
   while true; do
     tmp="$(mktemp)"
     if [[ "$mode" == destination ]]; then
-      header='Enter: open directory | Ctrl-A: accept directory | Backspace: parent | Esc: cancel'
+      header='Ctrl-D: open directory | Enter/Ctrl-A: accept directory | Ctrl-U: parent | Esc: cancel'
     else
-      header='Enter: open directory/accept file | Tab: mark | Ctrl-A: accept | Backspace: parent | Esc: cancel'
+      header='Ctrl-D: open directory | Enter: accept | Tab: mark | Ctrl-A: accept | Ctrl-U: parent | Esc: cancel'
     fi
     if ! list_local_entries "$current" "$directories_only" | FZF_DEFAULT_OPTS_FILE='' fzf \
       --read0 --print0 "${multi[@]}" --scheme=path --layout=reverse \
       --prompt="${mode}> " --border-label="$current" --header="$header" \
-      --expect=enter,ctrl-a,backspace \
+      --expect=enter,ctrl-a,ctrl-d,ctrl-u \
       --preview="bash $(printf '%q' "$SELF_PATH") --_preview {}" \
       --preview-window=right:55%:wrap > "$tmp"; then
       rm -f -- "$tmp"
@@ -119,14 +123,14 @@ browse_local() {
     rm -f -- "$tmp"
     action="${result[0]:-}"
     records=("${result[@]:1}")
-    if [[ "$action" == backspace ]]; then
+    if [[ "$action" == ctrl-u ]]; then
       current="$(dirname -- "$current")"
       continue
     fi
     [[ ${#records[@]} -gt 0 ]] || continue
     record="${records[0]}"
     path="${record:4}"
-    if [[ "$action" == enter && ${#records[@]} -eq 1 && "${record:0:3}" != '[C]' && -d "$path" ]]; then
+    if [[ "$action" == ctrl-d && ${#records[@]} -eq 1 && "${record:0:3}" != '[C]' && -d "$path" ]]; then
       current="$(cd -- "$path" && pwd -P)"
       continue
     fi
@@ -189,43 +193,71 @@ run_transfer() {
   local -a sources=() command=() selected=()
   need_cmd fzf || die 'fzf not found.'
   need_cmd "$tool" || die "$tool not found."
-  direction="$(choose_direction)" || { echo 'Cancelled.'; return 0; }
+  direction="$(choose_direction)" || { echo 'Cancelled.'; return 1; }
   echo "${tool^^} ${direction} for $alias ($user@$host)" >&2
   if [[ "$direction" == upload ]]; then
     mapfile -d '' -t sources < <(browse_local source "$(pwd -P)")
-    [[ ${#sources[@]} -gt 0 ]] || { echo 'Cancelled.'; return 0; }
+    [[ ${#sources[@]} -gt 0 ]] || { echo 'Cancelled.'; return 1; }
     if [[ "$tool" == rsync ]]; then
       selected=()
       for path in "${sources[@]}"; do
         if [[ -d "$path" ]]; then
-          mode="$(choose_directory_mode)" || { echo 'Cancelled.'; return 0; }
+          mode="$(choose_directory_mode)" || { echo 'Cancelled.'; return 1; }
           [[ "$mode" == contents && "$path" != */ ]] && path="$path/"
         fi
         selected+=("$path")
       done
       sources=("${selected[@]}")
     fi
-    remote_path="$(prompt_remote_path 'Remote destination path [~]: ' '~')" || { echo 'Cancelled.'; return 0; }
+    remote_path="$(prompt_remote_path 'Remote destination path [~]: ' '~')" || { echo 'Cancelled.'; return 1; }
     [[ "$tool" == scp ]] && command=(scp -r --) || command=(rsync -avz --progress --protect-args --)
     command+=("${sources[@]}" "${alias}:${remote_path}")
   else
-    remote_path="$(prompt_remote_path 'Remote source path: ')" || { echo 'Cancelled.'; return 0; }
+    remote_path="$(prompt_remote_path 'Remote source path: ')" || { echo 'Cancelled.'; return 1; }
     mapfile -d '' -t selected < <(browse_local destination "$(pwd -P)")
-    [[ ${#selected[@]} -eq 1 ]] || { echo 'Cancelled.'; return 0; }
+    [[ ${#selected[@]} -eq 1 ]] || { echo 'Cancelled.'; return 1; }
     destination="${selected[0]}"
     [[ "$tool" == scp ]] && command=(scp -r --) || command=(rsync -avz --progress --protect-args --)
     command+=("${alias}:${remote_path}" "$destination")
   fi
   printf 'Running: '
   print_shell_command "${command[@]}"
-  exec "${command[@]}"
+  if "${command[@]}"; then
+    echo 'Transfer completed.' >&2
+  else
+    echo "Transfer failed (exit $?)." >&2
+  fi
+}
+
+post_action_menu() {
+  local tool="$1" alias="$2" choice main_path
+  choice="$(choose_fzf_value 'next> ' $'ssh\tConnect with ssh\nagain\tRun another transfer\nmenu\tBack to ssf main menu\nquit\tClose this session')" || return 1
+  case "$choice" in
+    ssh)
+      tmux_rename_window_safe "$(tmux_label_for ssh "$alias")"
+      tmux_rename_session_safe ssh "$alias"
+      exec ssh "$alias"
+      ;;
+    again) return 0 ;;
+    menu)
+      main_path="${SSF_MAIN_PATH:-}"
+      [[ -n "$main_path" && -f "$main_path" ]] || main_path="$(command -v ssf || true)"
+      [[ -n "$main_path" ]] || die 'ssf main script not found'
+      exec bash "$main_path"
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 main() {
   case "${1:-}" in
     --_preview) preview_local_entry "${2:-}" ;;
     --_cmd) shift; command_mode "$@" ;;
-    scp|rsync) run_transfer "$@" ;;
+    scp|rsync)
+      while run_transfer "$@"; do
+        post_action_menu "$@" || break
+      done
+      ;;
     *) die 'Usage: ssf-transfer scp|rsync ALIAS USER HOST' ;;
   esac
 }

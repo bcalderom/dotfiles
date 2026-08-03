@@ -1,0 +1,40 @@
+# tmux session/window renaming helpers for ssf and ssf-transfer.
+
+normalize_name() {
+  printf '%s' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | tr -cs '[:alnum:]_-' '-'
+}
+
+tmux_label_for() {
+  local prefix="$1" alias="$2"
+  printf '%s-%s' "$prefix" "$(normalize_name "$alias")"
+}
+
+tmux_rename_window_safe() {
+  local name="$1"
+  [[ -n "${TMUX:-}" ]] || return 0
+  need_cmd tmux || return 0
+  tmux rename-window -- "$name" 2>/dev/null || true
+}
+
+tmux_rename_session_safe() {
+  local prefix="$1" alias="$2" current target candidate n
+  [[ -n "${TMUX:-}" ]] || return 0
+  need_cmd tmux || return 0
+  current="$(tmux display-message -p '#{session_name}' 2>/dev/null)" || return 0
+  case "$current" in
+    ssh-*|scp-*|rsync-*) ;;
+    *) return 0 ;;
+  esac
+  target="$(tmux_label_for "$prefix" "$alias")"
+  if [[ "$current" == "$target" ]]; then
+    return 0
+  fi
+  candidate="$target"
+  n=2
+  while tmux has-session -t "$candidate" 2>/dev/null; do
+    candidate="${target}-$((n++))"
+  done
+  tmux rename-session -t "$current" "$candidate" 2>/dev/null || true
+}
