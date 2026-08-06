@@ -351,7 +351,7 @@ fi
 
 BASE_HASH="$(sha256sum "${TARGET}" | awk '{print $1}')"
 
-if [[ "${MODE}" == "note" ]] && [[ "$(basename -- "${EDITOR_CMD}")" =~ ^(nvim|vim)$ ]]; then
+if [[ "${MODE}" == "note" ]] && [[ "$(basename -- "${EDITOR_CMD}")" =~ ^(nvim|vim|nvim_file_session)$ ]]; then
   "$EDITOR_CMD" +"call cursor(6,1)" +startinsert "${TARGET}"
 else
   "$EDITOR_CMD" "${TARGET}"

@@ -209,4 +209,25 @@ bash "${ONN_SCRIPT}" --meeting --template "${CUSTOM_TEMPLATE}" "Override Templat
 assert_file_exists "${ONN_NOTE_DIR}/override-template.md"
 assert_file_contains "${ONN_NOTE_DIR}/override-template.md" "TEMPLATE:custom"
 
+cat > "${MOCK_BIN}/nvim_file_session" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$@" > "${EDITOR_ARGS_LOG}"
+for arg in "$@"; do
+  if [[ -f "${arg}" ]]; then
+    printf '\nedited\n' >> "${arg}"
+  fi
+done
+EOF
+chmod +x "${MOCK_BIN}/nvim_file_session"
+
+export EDITOR="nvim_file_session"
+export EDITOR_ARGS_LOG="${TMPDIR}/editor-args.log"
+bash "${ONN_SCRIPT}" "Wrapped Editor" >/dev/null
+assert_file_exists "${ONN_NOTE_DIR}/wrapped-editor.md"
+assert_file_contains "${EDITOR_ARGS_LOG}" '+call cursor(6,1)'
+assert_file_contains "${EDITOR_ARGS_LOG}" '+startinsert'
+assert_file_contains "${EDITOR_ARGS_LOG}" "${ONN_NOTE_DIR}/wrapped-editor.md"
+
 echo "OK"

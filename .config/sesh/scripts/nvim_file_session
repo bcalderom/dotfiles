@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+rename_helper="$HOME/.config/sesh/scripts/tmux_rename_vim_file"
+rename_command="autocmd BufReadPost * ++once lua vim.fn.system({[[$rename_helper]], vim.fn.expand('<afile>:p')})"
+telescope_mapping="attach_mappings = function() require('telescope.actions').select_default:enhance({ post = function() local path = vim.api.nvim_buf_get_name(0); if path ~= '' and vim.bo.buftype == '' then vim.fn.system({[[$rename_helper]], path}) end end }); return true end"
+find_files_command="autocmd VimEnter * ++once lua vim.schedule(function() require('telescope.builtin').find_files({ $telescope_mapping }) end)"
+file_browser_command="autocmd VimEnter * ++once lua vim.schedule(function() local telescope = require('telescope'); pcall(telescope.load_extension, 'file_browser'); telescope.extensions.file_browser.file_browser({ path = vim.loop.cwd(), cwd = vim.loop.cwd(), hidden = true, respect_gitignore = false, grouped = true, initial_mode = 'insert', $telescope_mapping }) end)"
+
+case "${1:-}" in
+  --find-files)
+    exec nvim +"$find_files_command"
+    ;;
+  --file-browser)
+    exec nvim +"$file_browser_command"
+    ;;
+  "")
+    printf 'Usage: %s <--find-files|--file-browser|nvim-args...>\n' "${0##*/}" >&2
+    exit 2
+    ;;
+  *)
+    exec nvim --cmd "$rename_command" "$@"
+    ;;
+esac

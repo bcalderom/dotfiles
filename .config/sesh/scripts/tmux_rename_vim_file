@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -z "${TMUX:-}" ]] || ! command -v tmux >/dev/null 2>&1; then
+  exit 0
+fi
+
+file_path="${1:-}"
+if [[ -z "$file_path" ]]; then
+  printf 'Usage: %s <file-path>\n' "${0##*/}" >&2
+  exit 2
+fi
+
+base_name="vim-${file_path##*/}"
+session_name="$base_name"
+suffix=2
+sessions="$(tmux list-sessions -F '#{session_name}')"
+
+session_exists() {
+  local existing
+
+  while IFS= read -r existing; do
+    if [[ "$existing" == "$1" ]]; then
+      return 0
+    fi
+  done <<<"$sessions"
+
+  return 1
+}
+
+while session_exists "$session_name"; do
+  session_name="${base_name}-${suffix}"
+  ((suffix += 1))
+done
+
+tmux rename-session "$session_name"

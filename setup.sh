@@ -30,6 +30,7 @@ PKGS_BASE=(
   tmux
   ripgrep
   fd
+  eza
   neovim
   less
   tree

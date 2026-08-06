@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${SCRIPT_DIR}/sesh-menu"
+
+emit_row() {
+  local value="$1"
+  local source="$2"
+  local kind="$3"
+  local icon="$4"
+  local color="$5"
+  local display="${6:-$value}"
+
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    printf '%s\t%s\t%s\t%s %s\n' \
+      "$value" "$source" "$kind" "$icon" "$display"
+  else
+    printf '%s\t%s\t%s\t\033[%sm%s\033[0m %s\n' \
+      "$value" "$source" "$kind" "$color" "$icon" "$display"
+  fi
+}
+
+emit_sesh_row() {
+  local mode="$1"
+  local row="$2"
+  local source_icon="${row%% *}"
+  local value="${row#* }"
+  local source kind icon color
+
+  case "$source_icon" in
+    "") source="tmux"; kind="session"; icon=""; color=34 ;;
+    "") source="project"; kind="directory"; icon=""; color=36 ;;
+    *)
+      if [[ "$value" == cfg-* ]]; then
+        source="config"
+        case "$value" in
+          cfg-dotfiles|cfg-nvim) kind="directory" ;;
+          *) kind="file" ;;
+        esac
+      else
+        source="action"
+        kind="directory"
+      fi
+      icon=""
+      color=90
+      ;;
+  esac
+
+  case "$mode:$source" in
+    actions:action|configs:config) ;;
+    actions:*|configs:*) return ;;
+  esac
+
+  if [[ "$source" == "config" || "$source" == "action" ]]; then
+    case "$value" in
+      cfg-*) icon=""; color=90 ;;
+      terminal-*) icon=""; color=32 ;;
+      vim-*) icon=""; color=32 ;;
+      tds-*) icon=""; color=33 ;;
+      ssh-*) icon="󰣀"; color=34 ;;
+      notes-new) icon="󰎚"; color=35 ;;
+      notes-*) icon="󰂺"; color=35 ;;
+      files-*) icon=""; color=36 ;;
+    esac
+  fi
+
+  emit_row "$value" "$source" "$kind" "$icon" "$color"
+}
+
+list_rows() {
+  local mode="${1:-home}"
+  local -a command
+  local row path display_path source_icon
+  local project_count=0
+  local project_limit=5
+
+  if [[ "$mode" == "find" ]]; then
+    while IFS= read -r path; do
+      display_path="~${path#"$HOME"}"
+      emit_row "$path" "find" "directory" "" 36 "$display_path"
+    done < <(fd -H -d 2 -t d -E .Trash . "$HOME")
+    return
+  fi
+
+  case "$mode" in
+    home) command=(sesh list -t -c --icons --no-color) ;;
+    all) command=(sesh list --icons --no-color) ;;
+    sessions) command=(sesh list -t --icons --no-color) ;;
+    actions|configs) command=(sesh list -c --icons --no-color) ;;
+    projects) command=(sesh list -z --icons --no-color) ;;
+    *) printf 'Unknown list mode: %s\n' "$mode" >&2; return 2 ;;
+  esac
+
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+
+    source_icon="${row%% *}"
+    if [[ "$source_icon" == "" ]]; then
+      ((project_count += 1))
+      ((project_count <= project_limit)) || continue
+    fi
+
+    emit_sesh_row "$mode" "$row"
+  done < <("${command[@]}")
+}
+
+kill_session() {
+  local target="${1:-}"
+  local source="${2:-}"
+
+  [[ "$source" == "tmux" && -n "$target" ]] || return 0
+  tmux kill-session -t "$target"
+}
+
+resolve_directory() {
+  local target="$1"
+  local source="$2"
+
+  if [[ "$source" == "config" ]]; then
+    case "$target" in
+      cfg-dotfiles) target="$HOME/dotfiles" ;;
+      cfg-nvim) target="$HOME/.config/nvim/lua" ;;
+    esac
+  fi
+
+  case "$target" in
+    "~") target="$HOME" ;;
+    "~/"*) target="$HOME/${target#\~/}" ;;
+  esac
+
+  printf '%s' "$target"
+}
+
+open_directory() {
+  local target="${1:-}"
+  local source="${2:-}"
+  local kind="${3:-}"
+  local -a opener
+
+  [[ "$kind" == "directory" ]] || return 0
+  [[ "$source" == "project" || "$source" == "find" || "$source" == "config" ]] || return 0
+  target="$(resolve_directory "$target" "$source")"
+
+  [[ -d "$target" ]] || return 0
+
+  if command -v xdg-open >/dev/null 2>&1; then
+    opener=(xdg-open)
+  elif command -v gio >/dev/null 2>&1; then
+    opener=(gio open)
+  else
+    return 127
+  fi
+
+  if [[ -n "${SESH_MENU_SYNC_OPEN:-}" ]]; then
+    "${opener[@]}" "$target"
+  else
+    nohup "${opener[@]}" "$target" >/dev/null 2>&1 &
+  fi
+}
+
+preview_item() {
+  local target="${1:-}"
+  local source="${2:-}"
+  local kind="${3:-}"
+
+  if [[ "$kind" == "directory" && ( "$source" == "project" || "$source" == "find" ) ]]; then
+    target="$(resolve_directory "$target" "$source")"
+    eza -alg --color=always --group-directories-first -- "$target"
+    return
+  fi
+
+  sesh preview "$target"
+}
+
+view_preview() {
+  preview_item "${1:-}" "${2:-}" "${3:-}" | less -R
+}
+
+print_header() {
+  local source="${1:-none}"
+  local kind="${2:-none}"
+  local context
+
+  case "$source:$kind" in
+    tmux:session) context="enter switch  ^d kill  M-k/j preview  ^/ search" ;;
+    config:file) context="enter edit  M-k/j preview  ^/ search" ;;
+    config:directory) context="enter launch  ^e explorer  M-k/j preview  ^/ search" ;;
+    project:directory|find:directory) context="enter open tmux  ^e explorer  M-k/j preview  ^/ search" ;;
+    action:*) context="enter launch  M-k/j preview  ^/ search" ;;
+    *) context="type to search" ;;
+  esac
+
+  printf '  %s\n  esc close  ^a all ^t tmux ^o act ^g cfg ^x dirs ^f find\n' "$context"
+}
+
+case "${1:-}" in
+  --list)
+    list_rows "${2:-home}"
+    exit
+    ;;
+  --kill)
+    kill_session "${2:-}" "${3:-}"
+    exit
+    ;;
+  --open)
+    open_directory "${2:-}" "${3:-}" "${4:-}"
+    exit
+    ;;
+  --preview)
+    preview_item "${2:-}" "${3:-}" "${4:-}"
+    exit
+    ;;
+  --view)
+    view_preview "${2:-}" "${3:-}" "${4:-}"
+    exit
+    ;;
+  --header)
+    print_header "${2:-}" "${3:-}"
+    exit
+    ;;
+esac
+
+fzf_layout=(--layout=default)
+if [[ -z "${TMUX:-}" ]]; then
+  fzf_layout+=(--margin=20%,12.5% --border)
+fi
+
+selection="$(
+  "$SCRIPT_PATH" --list home | fzf \
+    "${fzf_layout[@]}" \
+    --no-sort --ansi \
+    --delimiter=$'\t' \
+    --with-nth=4 \
+    --accept-nth=1 \
+    --border-label " sesh " \
+    --prompt "home  " \
+    --header "$("$SCRIPT_PATH" --header none none)" \
+    --bind "esc:abort" \
+    --bind "tab:down,btab:up" \
+    --bind "focus:transform-header($SCRIPT_PATH --header {2} {3})" \
+    --bind "alt-j:preview-down,alt-k:preview-up" \
+    --bind "ctrl-a:change-prompt(all  )+reload($SCRIPT_PATH --list all)" \
+    --bind "ctrl-t:change-prompt(sessions  )+reload($SCRIPT_PATH --list sessions)" \
+    --bind "ctrl-o:change-prompt(actions  )+reload($SCRIPT_PATH --list actions)" \
+    --bind "ctrl-g:change-prompt(configs  )+reload($SCRIPT_PATH --list configs)" \
+    --bind "ctrl-x:change-prompt(projects  )+reload($SCRIPT_PATH --list projects)" \
+    --bind "ctrl-f:change-prompt(find  )+reload($SCRIPT_PATH --list find)" \
+    --bind "ctrl-e:execute-silent($SCRIPT_PATH --open {1} {2} {3})+abort" \
+    --bind "ctrl-/:execute($SCRIPT_PATH --view {1} {2} {3})" \
+    --bind "ctrl-d:execute($SCRIPT_PATH --kill {1} {2})+change-prompt(home  )+reload($SCRIPT_PATH --list home)" \
+    --preview-window "right:55%" \
+    --preview "$SCRIPT_PATH --preview {1} {2} {3}"
+)" || exit 0
+
+[[ -n "$selection" ]] || exit 0
+exec sesh connect "$selection"

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec nvim +"autocmd VimEnter * ++once lua vim.schedule(function() require('telescope.builtin').find_files() end)"
+exec "$HOME/.config/sesh/scripts/nvim_file_session" --find-files
