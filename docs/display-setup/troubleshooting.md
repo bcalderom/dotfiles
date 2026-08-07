@@ -15,10 +15,13 @@ systemctl --user status hypr-lid.service
 journalctl --user -u hypr-lid.service -b
 pgrep -a kanshi || true
 hyprctl binds
+hyprctl configerrors
 coredumpctl list --since today
 ```
 
 Only `hypr-lid.service` should automatically invoke display transitions. Stop any `kanshi` process and remove direct lid handlers before retesting.
+
+With `hyprland.lua`, runtime configuration must use `hyprctl eval` with `hl.monitor` or `hl.workspace_rule`. Legacy `hyprctl keyword` and legacy dispatcher arguments are not applied by the Lua config provider. The coordinator logs any mutation response other than `ok`; inspect its journal for the exact error.
 
 ## Docked Monitor Does Not Activate
 

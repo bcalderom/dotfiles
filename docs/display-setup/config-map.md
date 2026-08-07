@@ -1,6 +1,6 @@
 # Config Map
 
-This map defines one owner for every part of the setup. Do not add another automatic process that calls `hyprctl keyword monitor`.
+This map defines one owner for every part of the setup. Do not add another automatic process that changes monitor rules.
 
 ## Hyprland Session
 
@@ -35,6 +35,7 @@ Files:
 `lid.sh` responsibilities:
 
 - Serialize transitions with a runtime lock.
+- Apply runtime monitor and workspace rules through Hyprland's Lua IPC.
 - Enable and verify the destination output before moving workspaces.
 - Move and rebind existing workspaces while preserving focus.
 - Save the internal-panel brightness and set its backlight to zero before disabling `eDP-1` when docked and closed.

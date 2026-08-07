@@ -21,8 +21,10 @@ active_workspace() { hyprctl activeworkspace 2>/dev/null | awk '/^workspace ID/ 
 
 record_active_workspace() {
   local workspace tmp
+  hyprctl monitors 2>/dev/null | awk -v internal="$LID_INTERNAL_OUTPUT" -v external="$LID_EXTERNAL_OUTPUT" -v hdmi="$LID_HDMI_OUTPUT" \
+    '$1 == "Monitor" && ($2 == internal || $2 == external || $2 == hdmi) { found = 1 } END { exit !found }' || return 0
   workspace="$(active_workspace)"
-  [ -n "$workspace" ] || return 0
+  case "$workspace" in ''|*[!0-9]*) return 0 ;; esac
   tmp="${ACTIVE_WORKSPACE_FILE}.$$"
   printf '%s\n' "$workspace" > "$tmp" && mv "$tmp" "$ACTIVE_WORKSPACE_FILE"
 }

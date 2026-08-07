@@ -42,6 +42,9 @@ case "${1:-}" in
     printf '\tpid: 123\n'
     printf '\twl socket: wayland-test\n'
     ;;
+  activeworkspace)
+    printf 'workspace ID %s (%s):\n' "${HYPR_ACTIVE_WS:-2}" "${HYPR_ACTIVE_WS:-2}"
+    ;;
   monitors)
     if [[ "${HYPRLAND_INSTANCE_SIGNATURE:-}" != "test-signature" || "${WAYLAND_DISPLAY:-}" != "wayland-test" ]]; then
       exit 1
@@ -274,6 +277,13 @@ if [[ "$(grep -Fc 'open internal laptop' "${HANDLER_LOG}")" -ne 1 ]]; then
   echo "Expected failed handler state to be retried only after backoff" >&2
   exit 1
 fi
+: > "${HANDLER_LOG}"
+printf '2\n' > "${HYPR_LID_ACTIVE_WORKSPACE_FILE}"
+printf 'state: closed\n' > "${LID_STATE_PATH}"
+printf 'none\n' > "${MONITOR_STATE_PATH}"
+printf 'docked\n' > "${RULE_STATE_PATH}"
+HYPR_ACTIVE_WS=9 env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0 LID_SETTLE_DELAY=0 LID_STABLE_SAMPLES=1 LID_RECONCILE_INTERVAL=1 LID_WATCH_ITERATIONS=3 bash "${WATCH_SCRIPT}"
+[[ "$(cat "${HYPR_LID_ACTIVE_WORKSPACE_FILE}")" == 2 ]] || { echo "Expected outputless state to preserve the last active workspace" >&2; exit 1; }
 : > "${HANDLER_LOG}"
 HYPR_UNAVAILABLE=1 PATH="${MOCK_BIN}:${PATH}" LID_POLL_INTERVAL=0 LID_SETTLE_DELAY=0 LID_WATCH_ITERATIONS=3 bash "${WATCH_SCRIPT}"
 [[ ! -s "${HANDLER_LOG}" ]] || { echo "Did not expect handling without Hyprland" >&2; exit 1; }

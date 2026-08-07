@@ -31,7 +31,12 @@ hyprctl_run() {
   fi
 }
 
-hyprctl_quiet() { hyprctl_run "$@" >/dev/null 2>&1; }
+hyprctl_mutate() {
+  local output
+  if output="$(hyprctl_run "$@" 2>&1)" && [ "$output" = "ok" ]; then return 0; fi
+  log "hyprctl $1 failed: ${output:-no response}"
+  return 1
+}
 
 lid_is_closed() {
   if [ -n "$LID_STATE_PATH" ]; then
@@ -80,14 +85,14 @@ mark_reload_tried() {
 
 enable_external() {
   if ! monitor_active "$EXTERNAL"; then
-    hyprctl_quiet keyword monitor "$EXTERNAL,2560x1440@120.01,1920x0,1" || true
+    hyprctl_mutate eval "hl.monitor({ output = '$EXTERNAL', mode = '2560x1440@120.01', position = '1920x0', scale = 1, disabled = false })" || true
   fi
   wait_for_monitor "$EXTERNAL"
 }
 
 enable_internal_once() {
   if ! monitor_active "$INTERNAL"; then
-    hyprctl_quiet keyword monitor "$INTERNAL,preferred,0x0,1" || true
+    hyprctl_mutate eval "hl.monitor({ output = '$INTERNAL', mode = 'preferred', position = '0x0', scale = 1, disabled = false })" || true
   fi
   wait_for_monitor "$INTERNAL"
 }
@@ -100,13 +105,13 @@ enable_internal() {
   mark_reload_tried "$key"
   log "internal output still inactive; trying one delayed Hyprland reload for $key"
   sleep "$RECOVERY_DELAY"
-  hyprctl_quiet reload || return 1
+  hyprctl_mutate reload || return 1
   enable_internal_once && { rm -f "$RECOVERY_FILE"; return 0; }; return 1
 }
 
 disable_hdmi() {
   monitor_active "$HDMI" || return 0
-  hyprctl_quiet keyword monitor "$HDMI,disable" || true
+  hyprctl_mutate eval "hl.monitor({ output = '$HDMI', disabled = true })" || true
 }
 
 route_audio() {
@@ -186,15 +191,15 @@ movable_workspace_ids() {
     awk '$1 ~ /^[0-9]+$/ && !seen[$1]++ { print $1 }'
 }
 
-movable_external_workspace_ids() {
-  { workspace_ids_on_monitor_with_windows "$EXTERNAL"; [ "$2" -eq 1 ] && printf '%s\n' "$1"; } |
-    awk '$1 ~ /^[0-9]+$/ && !seen[$1]++ { print $1 }'
+docked_external_workspace_ids() {
+  { workspace_ids_with_windows; [ "$2" -eq 1 ] && printf '%s\n' "$1"; } |
+    awk -v internal="$3" '$1 ~ /^[0-9]+$/ && $1 != internal && !seen[$1]++ { print $1 }'
 }
 
-bind_nonpersistent_workspace() { hyprctl_quiet keyword workspace "$1,monitor:$2,persistent:false" || true; }
+bind_nonpersistent_workspace() { hyprctl_mutate eval "hl.workspace_rule({ workspace = '$1', monitor = '$2', persistent = false })" || true; }
 bind_numbered_workspaces() { local workspace; for workspace in {1..10}; do bind_nonpersistent_workspace "$workspace" "$1"; done; }
-move_workspace() { hyprctl_quiet dispatch moveworkspacetomonitor "$1" "$2" || true; }
-restore_workspace() { [ -n "$1" ] && hyprctl_quiet dispatch workspace "$1" || true; }
+move_workspace() { hyprctl_mutate dispatch "hl.dsp.workspace.move({ workspace = '$1', monitor = '$2' })" || true; }
+restore_workspace() { [ -n "$1" ] && hyprctl_mutate dispatch "hl.dsp.focus({ workspace = '$1' })" || true; }
 
 demote_retired_workspaces() {
   local protected_file="$1" target="$2" workspace
@@ -220,7 +225,7 @@ configure_docked_open_workspaces() {
   protected_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-protected.XXXXXX")" || return 1
   external_file="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/hypr-lid-external.XXXXXX")" || { rm -f "$protected_file"; return 1; }
 
-  movable_external_workspace_ids "$current_ws" "$restore_current" > "$external_file"
+  docked_external_workspace_ids "$current_ws" "$restore_current" "$internal_ws" > "$external_file"
   { cat "$external_file"; printf '%s\n' "$internal_ws"; } | awk '$1 ~ /^[0-9]+$/ && !seen[$1]++ { print $1 }' > "$protected_file"
   bind_numbered_workspaces "$EXTERNAL"
   while IFS= read -r workspace; do bind_nonpersistent_workspace "$workspace" "$EXTERNAL"; done < "$external_file"
@@ -248,7 +253,7 @@ case "$STATE" in
         restore_workspace "$current_ws"
         backlight_off
         if internal_available; then
-          hyprctl_quiet keyword monitor "$INTERNAL,disable" || transition_status=1
+          hyprctl_mutate eval "hl.monitor({ output = '$INTERNAL', disabled = true })" || transition_status=1
           i=0; while internal_available && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
           internal_available && transition_status=1
         fi
@@ -270,7 +275,7 @@ case "$STATE" in
       enable_internal "$(topology_key)" 0 || exit 1
     elif hdmi_available; then
       enable_internal "$(topology_key)" || exit 1
-      hyprctl_quiet keyword monitor "$HDMI,1920x1080@60,0x0,1,mirror,$INTERNAL" || true
+      hyprctl_mutate eval "hl.monitor({ output = '$HDMI', mode = '1920x1080@60', position = '0x0', scale = 1, mirror = '$INTERNAL', disabled = false })" || true
     else
       enable_internal "$(topology_key)" || exit 1
     fi
