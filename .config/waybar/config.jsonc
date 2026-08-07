@@ -1,7 +1,7 @@
 {
   "position": "top",
   "modules-left": [
-    "hyprland/workspaces"
+    "ext/workspaces"
   ],
   "modules-center": [
     // "hyprland/window"
@@ -17,10 +17,10 @@
     "cpu",
     "memory"
   ],
-  "hyprland/workspaces": {
+  "ext/workspaces": {
     "all-outputs": false,
-    "sort-by": "number",
-    "move-to-monitor": false
+    "sort-by-id": true,
+    "on-click": "activate"
   },
   "pulseaudio": {
     "format": "{icon}  {volume}%",
