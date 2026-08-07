@@ -12,13 +12,13 @@ The transition coordinator uses connector names; Hyprland startup defaults use s
 
 ## Hyprland Monitor Rules
 
-Configured in `~/.config/hypr/hyprland.conf`:
+Configured in `~/.config/hypr/hyprland.lua`:
 
 | Monitor rule | Purpose |
 | --- | --- |
 | `desc:AU Optronics 0x369F` | Internal display at `0x0` |
 | `desc:ViewSonic Corporation VX2768-2KPC W5H211040271` | ViewSonic at `2560x1440@120.01Hz`, position `1920x0` |
-| `monitor=,preferred,auto,1` | Generic output fallback |
+| `hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })` | Generic output fallback |
 
 ## Verification
 
@@ -27,4 +27,4 @@ hyprctl monitors
 hyprctl monitors all
 ```
 
-If connector names or descriptors change after an update, update both `hyprland.conf` and the output constants in `lid.sh` and `lid-watch.sh`.
+If connector names or descriptors change after an update, update both `hyprland.lua` and the output constants in `lid.sh` and `lid-watch.sh`.

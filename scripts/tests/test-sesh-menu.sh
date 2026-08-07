@@ -153,7 +153,7 @@ assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/opencode/c
 assert_contains "$sesh_output" 'EDITOR=/home/boris/.config/sesh/scripts/nvim_file_session onn'
 assert_contains "$sesh_output" 'nvim_file_session /home/boris/.zshrc'
 assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/tmux/tmux.conf'
-assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/hypr/hyprland.conf'
+assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/hypr/hyprland.lua'
 assert_contains "$sesh_output" 'nvim_file_session /home/boris/.ssh/config'
 assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/sesh/sesh.toml'
 assert_contains "$sesh_output" 'eza -alg --color=always --group-directories-first'

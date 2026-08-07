@@ -281,13 +281,13 @@ if grep -Fq 'kanshi' "${LID_SCRIPT}"; then
   fi
 fi
 
-HYPR_CONFIG="${DOTFILES_DIR}/.config/hypr/hyprland.conf"
-if grep -Eq 'exec-once[[:space:]]*=[[:space:]]*kanshi|bindl.*Lid Switch.*lid\.sh' "${HYPR_CONFIG}"; then
+HYPR_CONFIG="${DOTFILES_DIR}/.config/hypr/hyprland.lua"
+if grep -Eq 'hl\.exec_cmd\(.*kanshi|hl\.bind\(.*Lid Switch.*lid\.sh' "${HYPR_CONFIG}"; then
   echo "Hyprland must not register another automatic display-transition owner" >&2
   exit 1
 fi
 
-if ! grep -Eq '^env[[:space:]]*=[[:space:]]*DE,generic$' "${HYPR_CONFIG}"; then
+if ! grep -Eq '^hl\.env\("DE",[[:space:]]*"generic"\)$' "${HYPR_CONFIG}"; then
   echo "Hyprland apps must bypass xdg-utils X11 desktop detection" >&2
   exit 1
 fi

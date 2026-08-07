@@ -4,7 +4,7 @@ This map defines one owner for every part of the setup. Do not add another autom
 
 ## Hyprland Session
 
-File: `~/.config/hypr/hyprland.conf`
+File: `~/.config/hypr/hyprland.lua`
 
 Responsibilities:
 

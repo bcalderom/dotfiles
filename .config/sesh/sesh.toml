@@ -74,8 +74,8 @@ preview_command = "cat -- /home/boris/.config/tmux/tmux.conf"
 [[session]]
 name = "cfg-hypr"
 path = "~/.config/hypr/"
-startup_command = "/home/boris/.config/sesh/scripts/nvim_file_session /home/boris/.config/hypr/hyprland.conf"
-preview_command = "cat -- /home/boris/.config/hypr/hyprland.conf"
+startup_command = "/home/boris/.config/sesh/scripts/nvim_file_session /home/boris/.config/hypr/hyprland.lua"
+preview_command = "cat -- /home/boris/.config/hypr/hyprland.lua"
 
 [[session]]
 name = "cfg-ssh"
