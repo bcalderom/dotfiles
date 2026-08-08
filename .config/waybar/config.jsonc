@@ -19,7 +19,7 @@
   ],
   "ext/workspaces": {
     "all-outputs": false,
-    "sort-by-id": true,
+    "sort-by-name": true,
     "on-click": "activate"
   },
   "pulseaudio": {
