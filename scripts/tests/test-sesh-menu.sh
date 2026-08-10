@@ -55,11 +55,6 @@ set -euo pipefail
 printf 'file=%s\n' "${SESH_NVIM_FILE:-}" >"$NVIM_LOG"
 printf 'arg=%s\n' "$@" >>"$NVIM_LOG"
 EOF
-cat >"$tmp_dir/bin/xdg-open" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s' "$1" >"$OPEN_DIRECTORY_LOG"
-EOF
 cat >"$tmp_dir/bin/eza" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -76,7 +71,6 @@ EOF
 chmod +x \
   "$tmp_dir/bin/tmux" \
   "$tmp_dir/bin/nvim" \
-  "$tmp_dir/bin/xdg-open" \
   "$tmp_dir/bin/eza" \
   "$tmp_dir/bin/less"
 run_rename_test() {
@@ -163,7 +157,8 @@ assert_contains "$tmux_config" 'display-popup -E -w 75% -h 60%'
 assert_contains "$tmux_config" 'scripts/tmux/sesh-sessions/sesh-menu'
 
 menu_source="$(<"$MENU_SCRIPT")"
-assert_contains "$menu_source" '--open {1} {2} {3})+abort'
+assert_contains "$menu_source" 'ctrl-e:transform('
+assert_contains "$menu_source" '--open-action {1} {2} {3}'
 
 actions_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list actions)"
 configs_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list configs)"
@@ -202,24 +197,6 @@ fi
 TMUX_KILL_LOG="$tmp_dir/tmux-kill.log" PATH="$tmp_dir/bin:$PATH" \
   "$MENU_SCRIPT" --kill 'vim-example.lua' 'tmux'
 assert_eq "$(<"$tmp_dir/tmux-kill.log")" 'vim-example.lua'
-
-mkdir -p "$tmp_dir/home/example"
-OPEN_DIRECTORY_LOG="$tmp_dir/open-directory.log" \
-  SESH_MENU_SYNC_OPEN=1 \
-  HOME="$tmp_dir/home" \
-  PATH="$tmp_dir/bin:$PATH" \
-  "$MENU_SCRIPT" --open '~/example' 'project' 'directory'
-assert_eq "$(<"$tmp_dir/open-directory.log")" "$tmp_dir/home/example"
-
-rm -f "$tmp_dir/open-directory.log"
-OPEN_DIRECTORY_LOG="$tmp_dir/open-directory.log" \
-  SESH_MENU_SYNC_OPEN=1 \
-  PATH="$tmp_dir/bin:$PATH" \
-  "$MENU_SCRIPT" --open 'cfg-sesh' 'config' 'file'
-if [[ -e "$tmp_dir/open-directory.log" ]]; then
-  printf 'Non-directory rows must not launch the file manager\n' >&2
-  exit 1
-fi
 
 tmux_header="$("$MENU_SCRIPT" --header 'tmux' 'session')"
 file_header="$("$MENU_SCRIPT" --header 'config' 'file')"

@@ -39,11 +39,14 @@ actions are shown only when applicable.
 
 ## Dependencies
 
-Requires `sesh`, `tmux`, `fzf`, `fd`, `eza` and `less`. Opening directories
-graphically uses `xdg-open`, with `gio open` as fallback.
+Requires `sesh`, `tmux`, `fzf`, `fd`, `eza`, `less` and `setsid` from
+`util-linux`. Opening directories graphically uses `xdg-open`, with `gio open`
+as fallback. The opener is detached from the tmux popup before the picker
+closes.
 
 ## Tests
 
 ```bash
 bash scripts/tests/test-sesh-menu.sh
+bash scripts/tests/test-sesh-open-detach.sh
 ```

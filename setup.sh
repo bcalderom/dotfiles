@@ -28,6 +28,7 @@ PKGS_BASE=(
   npm
   unzip
   tmux
+  util-linux
   ripgrep
   fd
   eza
