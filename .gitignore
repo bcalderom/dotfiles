@@ -108,6 +108,7 @@ lambda_package/
 .config/Windsurf/
 .config/netbird
 .config/mimeapps.list
+.config/filetypesrc
 .config/dconf/
 .config/trashrc
 .config/pavucontrol.ini
