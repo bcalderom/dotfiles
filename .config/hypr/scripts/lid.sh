@@ -257,6 +257,7 @@ case "$STATE" in
           i=0; while internal_available && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i + 1)); done
           internal_available && transition_status=1
         fi
+        backlight_on
         route_audio
       else
         transition_status=1

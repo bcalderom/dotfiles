@@ -8,7 +8,7 @@ Trigger: `DP-1` connected and lid closed.
 - HDMI is disabled when it is also connected.
 - Active and occupied workspaces move to `DP-1`.
 - The active workspace is restored.
-- The `intel_backlight` brightness is saved and set to zero.
+- The `intel_backlight` brightness is saved, set to zero during disablement, and restored after the disable attempt so it cannot persist across reboot.
 - `eDP-1` is disabled after workspace migration and focus restoration.
 
 Verify with:
@@ -28,7 +28,7 @@ Trigger: `DP-1` connected and lid open.
 - Existing non-empty `DP-1` workspaces remain there.
 - `max(non-empty DP-1 workspace IDs) + 1` is placed on `eDP-1` with `persistent:false`.
 - The previously active workspace remains active.
-- The saved internal-panel brightness is restored.
+- Any saved internal-panel brightness from an interrupted transition is restored.
 
 ## Laptop Only
 

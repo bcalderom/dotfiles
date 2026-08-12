@@ -21,7 +21,7 @@ This directory documents display, workspace, lid, and audio behavior for the Len
 
 ## Critical Invariants
 
-- Docked lid-closed mode saves the internal brightness and disables `eDP-1` after workspace migration.
+- Docked lid-closed mode temporarily blanks the internal panel, disables `eDP-1` after workspace migration, and restores its saved brightness for the next console or boot.
 - Active and occupied workspaces move to `DP-1` before `eDP-1` is disabled.
 - Nonpersistent workspace rules `1-10` follow the primary display; docked-open mode overrides only its designated internal workspace.
 - Docked lid-open mode keeps existing `DP-1` workspaces there and creates the next numbered workspace on `eDP-1`.

@@ -38,7 +38,7 @@ Force closed-lid correction:
 ~/.config/hypr/scripts/lid.sh closed
 ```
 
-Expected with `DP-1` connected: active and occupied workspaces are on `DP-1`, empty inactive workspaces are absent, focus is preserved, and `eDP-1` is disabled after its brightness is saved.
+Expected with `DP-1` connected: active and occupied workspaces are on `DP-1`, empty inactive workspaces are absent, focus is preserved, `eDP-1` is disabled, and its brightness value is restored after the disable attempt.
 
 Force open-lid correction:
 
@@ -46,7 +46,7 @@ Force open-lid correction:
 ~/.config/hypr/scripts/lid.sh open
 ```
 
-Expected with `DP-1` connected: both outputs are enabled, the saved internal brightness is restored, existing external workspaces stay on `DP-1`, and the next numbered workspace is on `eDP-1`.
+Expected with `DP-1` connected: both outputs are enabled, any brightness left by an interrupted transition is restored, existing external workspaces stay on `DP-1`, and the next numbered workspace is on `eDP-1`.
 
 Expected without `DP-1`: `eDP-1` is enabled and existing workspaces return to it. If HDMI is connected, `HDMI-A-1` mirrors `eDP-1`.
 

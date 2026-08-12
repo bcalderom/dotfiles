@@ -39,8 +39,9 @@ Files:
 - Enable and verify the destination output before moving workspaces.
 - Move and rebind existing workspaces while preserving focus.
 - Save the internal-panel brightness and set its backlight to zero before disabling `eDP-1` when docked and closed.
+- Restore the saved brightness immediately after the disable attempt so shutdown cannot persist a zero backlight for the next boot.
 - Disable `eDP-1` only after `DP-1` is active, workspace migration completes, and focus is restored.
-- Restore the saved brightness after `eDP-1` is successfully enabled.
+- Restore any saved brightness after `eDP-1` is successfully enabled as a recovery fallback.
 - Avoid modesetting outputs that are already active.
 - Avoid routine DPMS toggles on `eDP-1`.
 - Avoid automatic reload while `DP-1` remains usable; permit one delayed reload only when no usable output remains.

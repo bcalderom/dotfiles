@@ -46,7 +46,7 @@ hyprctl workspacerules
 journalctl --user -u hypr-lid.service -b
 ```
 
-The coordinator disables `eDP-1` only after `DP-1` is active and workspace migration completes. If it remains enabled, inspect the service journal and confirm the workspace rules target `DP-1`. The upstream Aquamarine/i915 page-flip issue can prevent monitor transitions from committing even when `hyprctl` reports success. Its `intel_backlight` brightness should be zero before disablement.
+The coordinator disables `eDP-1` only after `DP-1` is active and workspace migration completes. If it remains enabled, inspect the service journal and confirm the workspace rules target `DP-1`. The upstream Aquamarine/i915 page-flip issue can prevent monitor transitions from committing even when `hyprctl` reports success. Its `intel_backlight` brightness is set to zero only during disablement, then restored so a shutdown cannot carry zero brightness into the next boot.
 
 Verify the physical backlight state with:
 

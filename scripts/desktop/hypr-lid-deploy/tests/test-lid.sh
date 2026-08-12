@@ -160,7 +160,7 @@ assert_no_process_restart() {
   assert_not_contains "waybar"
   assert_not_contains "pkill"
 }
-
+assert_backlight_restored() { [[ "$(cat "${BACKLIGHT_VALUE_PATH}")" -eq 100 && ! -e "${HYPR_LID_BACKLIGHT_STATE_FILE}" ]]; }
 echo "==> close lid with active dock"
 printf 'state: closed\n' > "${LID_STATE_PATH}"
 set_monitors "DP-1 eDP-1" "DP-1 eDP-1"
@@ -178,8 +178,8 @@ assert_not_contains "hl.dsp.dpms"
 assert_not_contains "hl.monitor({ output = 'DP-1', mode = '2560x1440"
 assert_no_process_restart
 [[ "$(grep -Fc route "${AUDIO_ROUTE_LOG}")" -eq 1 ]]
-[[ "$(cat "${BACKLIGHT_VALUE_PATH}")" -eq 0 ]]
-[[ "$(cat "${HYPR_LID_BACKLIGHT_STATE_FILE}")" -eq 100 ]]
+assert_backlight_restored
+[[ "$(grep -Fc 'set 0 ' "${BACKLIGHT_LOG}")" -eq 1 && "$(grep -Fc 'set 100 ' "${BACKLIGHT_LOG}")" -eq 1 ]]
 
 echo "==> activate dock before disabling internal display"
 reset_log
@@ -190,7 +190,7 @@ assert_contains "hl.monitor({ output = 'DP-1', mode = '2560x1440@120.01', positi
 assert_contains "hl.monitor({ output = 'HDMI-A-1', disabled = true })"
 assert_before "hl.monitor({ output = 'DP-1', mode = '2560x1440@120.01'" "hl.monitor({ output = 'HDMI-A-1', disabled = true })"
 assert_contains "hl.monitor({ output = 'eDP-1', disabled = true })"
-[[ "$(cat "${HYPR_LID_BACKLIGHT_STATE_FILE}")" -eq 100 ]]
+assert_backlight_restored
 
 echo "==> fail closed transition when dock activation is not observed"
 reset_log
