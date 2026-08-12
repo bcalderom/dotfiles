@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mode="${1:-home}"
+actions="change-prompt(${mode}  )"
+
+if [[ "$mode" == recent ]]; then
+  [[ "${FZF_WRAP:-}" == word ]] || actions+="+toggle-wrap-word"
+elif [[ -n "${FZF_WRAP:-}" ]]; then
+  actions+="+toggle-wrap-word"
+fi
+
+printf '%s\n' "$actions"

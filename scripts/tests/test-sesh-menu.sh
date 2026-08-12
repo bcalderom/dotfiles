@@ -73,6 +73,7 @@ chmod +x \
   "$tmp_dir/bin/nvim" \
   "$tmp_dir/bin/eza" \
   "$tmp_dir/bin/less"
+
 run_rename_test() {
   local sessions="$1"
   local expected="$2"
@@ -159,6 +160,7 @@ assert_contains "$tmux_config" 'scripts/tmux/sesh-sessions/sesh-menu'
 menu_source="$(<"$MENU_SCRIPT")"
 assert_contains "$menu_source" 'ctrl-e:transform('
 assert_contains "$menu_source" '--open-action {1} {2} {3}'
+assert_contains "$menu_source" 'ctrl-r:transform($SCRIPT_DIR/fzf-view-actions recent)'
 
 actions_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list actions)"
 configs_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list configs)"
@@ -201,12 +203,15 @@ assert_eq "$(<"$tmp_dir/tmux-kill.log")" 'vim-example.lua'
 tmux_header="$("$MENU_SCRIPT" --header 'tmux' 'session')"
 file_header="$("$MENU_SCRIPT" --header 'config' 'file')"
 directory_header="$("$MENU_SCRIPT" --header 'project' 'directory')"
+opencode_header="$("$MENU_SCRIPT" --header 'opencode' 'session')"
 assert_contains "$tmux_header" '^d kill'
 assert_not_contains "$tmux_header" '^e explorer'
 assert_contains "$file_header" '^/ search'
 assert_not_contains "$file_header" '^e explorer'
 assert_contains "$directory_header" '^e explorer'
 assert_contains "$directory_header" 'M-k/j preview'
+assert_contains "$opencode_header" 'enter resume'
+assert_contains "$opencode_header" '^r recent'
 
 mkdir -p "$tmp_dir/preview-dir"
 EZA_LOG="$tmp_dir/eza.log" PATH="$tmp_dir/bin:$PATH" \

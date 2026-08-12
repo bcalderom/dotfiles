@@ -15,30 +15,13 @@ RIGHT_BOTTOM_PERCENT="20"
 DEBUG="false"
 DIRS_MODE="false"
 INCLUDE_ZOXIDE="true"
+DIRECTORY=""
+NEW_SESSION="false"
+OPENCODE_SESSION=""
 
-usage() {
-  cat <<EOF
-Usage: tds [--root PATH] [--depth N] [--layout NAME]
-
-Options:
-  --root PATH   Search root directory (default: current directory)
-  --depth N     Depth of the initial directory listing (default: 2).
-                Typing in fzf searches the whole tree at any depth.
-  -l, --layout NAME   Layout to use (default: 3-panes-ide)
-  --debug       Print tmux layout debug info
-  -h, --help    Show this help
-
-The tmux session is renamed to oc-<directory>. If zoxide is installed,
-frecent directories are listed first and the selection is recorded.
-
-Picker keys:
-  enter: select · ctrl-d: enter dir · ctrl-u: go up · esc: cancel
-
-Layouts:
-  3-panes-ide
-  oc
-EOF
-}
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+# shellcheck source=scripts/tmux/tds/help.sh
+. "$(dirname -- "${SELF}")/help.sh"
 
 die() {
   echo "Error: $*" >&2
@@ -88,6 +71,18 @@ while [[ $# -gt 0 ]]; do
     ;;
   --no-zoxide)
     INCLUDE_ZOXIDE="false"
+    shift
+    ;;
+  --directory)
+    DIRECTORY="${2:-}"
+    shift 2
+    ;;
+  --opencode-session)
+    OPENCODE_SESSION="${2:-}"
+    shift 2
+    ;;
+  --new-session)
+    NEW_SESSION="true"
     shift
     ;;
   --root)
@@ -146,14 +141,16 @@ if have fd; then
 elif have fdfind; then
   FD_CMD="fdfind"
 else
-  die "Missing required tool: fd"
+  FD_CMD=""
 fi
 
-SELF="$(readlink -f "${BASH_SOURCE[0]}")"
-# shellcheck source=dirs.sh
+# shellcheck source=scripts/tmux/tds/dirs.sh
 . "$(dirname -- "${SELF}")/dirs.sh"
+# shellcheck source=scripts/tmux/tds/session.sh
+. "$(dirname -- "${SELF}")/session.sh"
 
 if [[ "${DIRS_MODE}" == "true" ]]; then
+  [[ -n "$FD_CMD" ]] || die "Missing required tool: fd"
   print_dirs "${QUERY[@]}"
   exit 0
 fi
@@ -166,10 +163,32 @@ if [[ -z "${LAYOUT}" ]]; then
   die "--layout cannot be empty."
 fi
 
-require_apps tmux fzf opencode
+if [[ -n "$OPENCODE_SESSION" && -z "$DIRECTORY" ]]; then
+  die "--opencode-session requires --directory."
+fi
 
-# shellcheck source=layouts.sh
+if [[ "$NEW_SESSION" == "true" && -z "$DIRECTORY" ]]; then
+  die "--new-session requires --directory."
+fi
+
+if [[ -n "$DIRECTORY" ]]; then
+  DIR="$DIRECTORY"
+  [[ -d "$DIR" ]] || die "Selected directory not found: ${DIR}"
+  require_apps tmux opencode
+else
+  [[ -n "$FD_CMD" ]] || die "Missing required tool: fd"
+  require_apps tmux fzf opencode
+fi
+
+# shellcheck source=scripts/tmux/tds/layouts.sh
 . "$(dirname -- "${SELF}")/layouts.sh"
+
+validate_layout
+
+if [[ "$NEW_SESSION" == "true" ]]; then
+  create_new_session
+  exit 0
+fi
 
 if [[ -z "${TMUX:-}" ]]; then
   echo "tmux is not running. Launching tmux..." >&2
@@ -190,15 +209,13 @@ if [[ -z "${TMUX:-}" ]]; then
   exec tmux attach -t tds
 fi
 
-validate_layout
-
 BASE_ROOT="${ROOT}"
-while :; do
+while [[ -z "$DIRECTORY" ]]; do
   DIRS_FLAGS=()
   if [[ "${ROOT}" != "${BASE_ROOT}" ]]; then
     DIRS_FLAGS+=(--no-zoxide)
   fi
-  RELOAD_CMD="$(escape_shell "${SELF}") --dirs ${DIRS_FLAGS[@]+"${DIRS_FLAGS[@]}"} --root $(escape_shell "${ROOT}") --depth ${DEPTH}"
+  RELOAD_CMD="$(escape_shell "${SELF}") --dirs ${DIRS_FLAGS[*]:-} --root $(escape_shell "${ROOT}") --depth ${DEPTH}"
 
   fzf_out="$(fzf --disabled \
     --expect=ctrl-d,ctrl-u \
@@ -251,16 +268,12 @@ WINDOW_ID="$(tmux display-message -p '#{window_id}')"
 CURRENT_PANE_ID="$(tmux display-message -p '#{pane_id}')"
 WINDOW_PANES="$(tmux display-message -p '#{window_panes}')"
 
-NEW_SESSION_BASE="$(basename -- "${DIR}")"
-NEW_SESSION="oc-${NEW_SESSION_BASE//[.:]/-}"
-if [[ "${SESSION_NAME}" != "${NEW_SESSION}" ]]; then
-  candidate="${NEW_SESSION}"
-  n=2
-  while tmux has-session -t "${candidate}" 2>/dev/null; do
-    candidate="${NEW_SESSION}-$((n++))"
-  done
-  debug_log "Renaming session ${SESSION_NAME} to ${candidate}"
-  tmux rename-session -t "${SESSION_NAME}" "${candidate}"
+rename_for_directory "$DIR"
+
+if [[ -n "$OPENCODE_SESSION" ]]; then
+  tmux set-option -q @opencode_session_id "$OPENCODE_SESSION"
+else
+  tmux set-option -qu @opencode_session_id 2>/dev/null || true
 fi
 
 if [[ "${DEBUG}" == "true" ]]; then

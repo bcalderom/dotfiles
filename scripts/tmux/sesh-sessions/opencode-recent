@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OPENCODE_BIN="${OPENCODE_BIN:-/usr/bin/opencode}"
+open_session_ids=""
+session_query='select id, title, directory
+from session
+where parent_id is null and time_archived is null
+order by time_updated desc'
+
+if command -v tmux >/dev/null 2>&1; then
+  open_session_ids="$(
+    tmux list-panes -a -F '#{pane_current_command}	#{@opencode_session_id}' 2>/dev/null \
+      | while IFS=$'\t' read -r command session_id; do
+          if [[ "$command" == "opencode" && -n "$session_id" ]]; then
+            printf '%s\n' "$session_id"
+          fi
+        done
+  )"
+fi
+
+"$OPENCODE_BIN" --pure db "$session_query" --format json \
+  | jq -r --arg open_session_ids "$open_session_ids" '
+      ($open_session_ids | split("\n") | map(select(length > 0))) as $open |
+      [
+        .[] |
+        select(.id as $id | ($open | index($id) | not)) |
+        [
+          .id,
+          (.title | gsub("[\\t\\r\\n]"; " ")),
+          (.directory | gsub("[\\t\\r\\n]"; " "))
+        ]
+      ][:5][] |
+      @tsv
+    '

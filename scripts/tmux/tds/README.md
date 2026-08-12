@@ -10,6 +10,8 @@ Open a selected directory in a tmux development session layout.
 tds
 tds --root ~/Desarrollos
 tds --root ~/Desarrollos --depth 3 --layout oc
+tds --directory ~/Desarrollos/project --layout oc \
+  --opencode-session ses_example --new-session
 ```
 
 The directory picker (fzf) starts with subdirectories up to `--depth`
@@ -17,6 +19,12 @@ levels (default: 2). Typing a query searches the **whole tree at any
 depth** (AND semantics for multiple words). After selecting a
 directory, the tmux session is renamed to `oc-<directory>` (a numeric
 suffix is added on name collisions).
+
+`--directory` skips the picker. `--opencode-session` resumes that OpenCode
+session with `opencode --session <id>` and records the ID as tmux metadata.
+`--new-session` creates and switches to a new `oc-<directory>` session instead
+of changing the current tmux session. These options are used by the recent
+OpenCode view in `sesh-menu`.
 
 ### Picker keys
 
@@ -42,4 +50,5 @@ frecent directories are listed first and the selection is recorded.
 
 ```bash
 bash tests/test-tds.sh
+bash tests/test-tds-resume.sh
 ```

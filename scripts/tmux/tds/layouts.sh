@@ -24,6 +24,16 @@ window_size() {
   tmux display-message -p -t "$1" '#{window_width}x#{window_height}' 2>/dev/null
 }
 
+opencode_command() {
+  local command="opencode"
+
+  if [[ -n "${OPENCODE_SESSION:-}" ]]; then
+    command+=" --session $(escape_shell "$OPENCODE_SESSION")"
+  fi
+
+  printf '%s' "$command"
+}
+
 split_pane() {
   local target="$1"
   local orientation="$2"
@@ -89,7 +99,7 @@ layout_3_panes_ide() {
   dir_escaped="$(escape_shell "${DIR}")"
 
   tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${left_pane}" "opencode" C-m
+  tmux send-keys -t "${left_pane}" "$(opencode_command)" C-m
 
   tmux send-keys -t "${top_right_pane}" "cd -- ${dir_escaped}" C-m
   tmux send-keys -t "${top_right_pane}" "nvim -c \"Telescope find_files\"" C-m
@@ -109,7 +119,7 @@ layout_oc() {
 
   dir_escaped="$(escape_shell "${DIR}")"
   tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${left_pane}" "opencode" C-m
+  tmux send-keys -t "${left_pane}" "$(opencode_command)" C-m
   tmux select-pane -t "${left_pane}"
 }
 
