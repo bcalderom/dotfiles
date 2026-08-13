@@ -10,7 +10,7 @@ order by time_updated desc'
 
 if command -v tmux >/dev/null 2>&1; then
   open_session_ids="$(
-    tmux list-panes -a -F '#{pane_current_command}	#{@opencode_session_id}' 2>/dev/null \
+    { tmux list-panes -a -F '#{pane_current_command}	#{@opencode_session_id}' 2>/dev/null || true; } \
       | while IFS=$'\t' read -r command session_id; do
           if [[ "$command" == "opencode" && -n "$session_id" ]]; then
             printf '%s\n' "$session_id"

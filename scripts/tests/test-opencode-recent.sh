@@ -12,6 +12,7 @@ mkdir -p "$tmp_dir/bin"
 
 cat >"$tmp_dir/bin/tmux" <<'EOF'
 #!/usr/bin/env bash
+[[ "${FAKE_TMUX_FAIL:-0}" == 1 ]] && exit 1
 printf '%s' "${FAKE_TMUX_PANES:-}"
 EOF
 cat >"$tmp_dir/bin/opencode" <<'EOF'
@@ -50,6 +51,10 @@ grep -qxF -- '--pure' "$tmp_dir/opencode-args.log"
 grep -qxF -- 'db' "$tmp_dir/opencode-args.log"
 grep -qF -- 'parent_id is null and time_archived is null' "$tmp_dir/opencode-args.log"
 grep -qF -- 'order by time_updated desc' "$tmp_dir/opencode-args.log"
+
+no_tmux_output="$(FAKE_TMUX_FAIL=1 run_recent "$RECENT_SCRIPT")"
+[[ "$no_tmux_output" == *$'ses_open\tOpen session\t/tmp/open'* ]]
+[[ "$(printf '%s\n' "$no_tmux_output" | wc -l)" == 5 ]]
 
 menu_output="$(NO_COLOR=1 run_recent "$MENU_SCRIPT" --list recent)"
 [[ "$menu_output" == *$'ses_1\topencode\tsession\t First  /tmp/one\t/tmp/one'* ]]
