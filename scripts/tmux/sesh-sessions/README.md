@@ -25,6 +25,7 @@ picker. Its views are:
 | `Ctrl-X` | Projects       |
 | `Ctrl-F` | Find directory |
 | `Ctrl-R` | Recent OpenCode sessions |
+| `F2`     | Rename the selected tmux session |
 | `Ctrl-E` | Open directory in the default file manager and close the picker |
 | `Alt-K`  | Scroll preview up |
 | `Alt-J`  | Scroll preview down |
@@ -35,7 +36,7 @@ SSH, notes and files. Configuration and active tmux entries retain the
 standard sesh icons. Project lists show at most the five highest-ranked
 zoxide directories; the free directory search remains unrestricted.
 The OpenCode view queries OpenCode's database command for all projects and
-shows the five most recently updated sessions that are not already open
+shows the ten most recently updated sessions that are not already open
 through this picker. It does not require starting the OpenCode TUI first.
 Selecting one creates a dedicated
 `oc-<directory>` tmux session through `tds`, resumes it in its original

@@ -30,6 +30,6 @@ fi
           (.title | gsub("[\\t\\r\\n]"; " ")),
           (.directory | gsub("[\\t\\r\\n]"; " "))
         ]
-      ][:5][] |
+      ][:10][] |
       @tsv
     '

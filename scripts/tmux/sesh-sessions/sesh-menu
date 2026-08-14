@@ -217,7 +217,7 @@ print_header() {
 
   case "$source:$kind" in
     opencode:session) context="enter resume  M-k/j preview  ^/ search" ;;
-    tmux:session) context="enter switch  ^d kill  M-k/j preview  ^/ search" ;;
+    tmux:session) context="enter switch  F2 rename  ^d kill  M-k/j preview  ^/ search" ;;
     config:file) context="enter edit  M-k/j preview  ^/ search" ;;
     config:directory) context="enter launch  ^e explorer  M-k/j preview  ^/ search" ;;
     project:directory|find:directory) context="enter open tmux  ^e explorer  M-k/j preview  ^/ search" ;;
@@ -260,9 +260,7 @@ case "${1:-}" in
 esac
 
 fzf_layout=(--layout=default)
-if [[ -z "${TMUX:-}" ]]; then
-  fzf_layout+=("--margin=20%,12.5%" --border)
-fi
+[[ -n "${TMUX:-}" ]] || fzf_layout+=("--margin=20%,12.5%" --border)
 
 selection="$(
   "$SCRIPT_PATH" --list home | fzf \
@@ -288,6 +286,7 @@ selection="$(
     --bind "ctrl-e:transform($SCRIPT_PATH --open-action {1} {2} {3})" \
     --bind "ctrl-/:execute($SCRIPT_PATH --view {1} {2} {3} {5})" \
     --bind "ctrl-d:execute($SCRIPT_PATH --kill {1} {2})+change-prompt(home  )+reload($SCRIPT_PATH --list home)" \
+    --bind "f2:execute($SCRIPT_DIR/rename-session {1} {2})+change-prompt(home  )+reload($SCRIPT_PATH --list home)" \
     --preview-window "right:55%" \
     --preview "$SCRIPT_PATH --preview {1} {2} {3} {5}"
 )" || exit 0

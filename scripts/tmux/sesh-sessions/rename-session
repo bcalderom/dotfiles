@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+target="${1:-}"
+source="${2:-}"
+
+[[ "$source" == "tmux" && -n "$target" ]] || exit 0
+
+new_name="$(
+  printf '\n' | fzf \
+    --height=40% \
+    --layout=reverse \
+    --border \
+    --border-label ' rename tmux session ' \
+    --disabled \
+    --no-info \
+    --no-scrollbar \
+    --prompt 'name  ' \
+    --query "$target" \
+    --header 'enter rename  esc cancel  ^u clear' \
+    --bind 'enter:print-query+accept,esc:abort'
+)" || exit 0
+new_name="${new_name%%$'\n'*}"
+
+[[ -n "$new_name" && "$new_name" != "$target" ]] || exit 0
+tmux rename-session -t "$target" "$new_name"

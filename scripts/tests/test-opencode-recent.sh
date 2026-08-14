@@ -29,7 +29,12 @@ json='[
   {"id":"ses_3","title":"Third","directory":"/tmp/three"},
   {"id":"ses_4","title":"Fourth","directory":"/tmp/four"},
   {"id":"ses_5","title":"Fifth","directory":"/tmp/five"},
-  {"id":"ses_6","title":"Sixth","directory":"/tmp/six"}
+  {"id":"ses_6","title":"Sixth","directory":"/tmp/six"},
+  {"id":"ses_7","title":"Seventh","directory":"/tmp/seven"},
+  {"id":"ses_8","title":"Eighth","directory":"/tmp/eight"},
+  {"id":"ses_9","title":"Ninth","directory":"/tmp/nine"},
+  {"id":"ses_10","title":"Tenth","directory":"/tmp/ten"},
+  {"id":"ses_11","title":"Eleventh","directory":"/tmp/eleven"}
 ]'
 
 run_recent() {
@@ -44,9 +49,9 @@ run_recent() {
 output="$(run_recent "$RECENT_SCRIPT")"
 [[ "$output" != *ses_open* ]]
 [[ "$output" == *$'ses_1\tFirst\t/tmp/one'* ]]
-[[ "$output" == *$'ses_5\tFifth\t/tmp/five'* ]]
-[[ "$output" != *ses_6* ]]
-[[ "$(printf '%s\n' "$output" | wc -l)" == 5 ]]
+[[ "$output" == *$'ses_10\tTenth\t/tmp/ten'* ]]
+[[ "$output" != *ses_11* ]]
+[[ "$(printf '%s\n' "$output" | wc -l)" == 10 ]]
 grep -qxF -- '--pure' "$tmp_dir/opencode-args.log"
 grep -qxF -- 'db' "$tmp_dir/opencode-args.log"
 grep -qF -- 'parent_id is null and time_archived is null' "$tmp_dir/opencode-args.log"
@@ -54,11 +59,13 @@ grep -qF -- 'order by time_updated desc' "$tmp_dir/opencode-args.log"
 
 no_tmux_output="$(FAKE_TMUX_FAIL=1 run_recent "$RECENT_SCRIPT")"
 [[ "$no_tmux_output" == *$'ses_open\tOpen session\t/tmp/open'* ]]
-[[ "$(printf '%s\n' "$no_tmux_output" | wc -l)" == 5 ]]
+[[ "$no_tmux_output" != *ses_10* ]]
+[[ "$(printf '%s\n' "$no_tmux_output" | wc -l)" == 10 ]]
 
 menu_output="$(NO_COLOR=1 run_recent "$MENU_SCRIPT" --list recent)"
 [[ "$menu_output" == *$'ses_1\topencode\tsession\t First  /tmp/one\t/tmp/one'* ]]
-[[ "$(printf '%s\n' "$menu_output" | wc -l)" == 5 ]]
+[[ "$menu_output" == *$'ses_10\topencode\tsession\t Tenth  /tmp/ten\t/tmp/ten'* ]]
+[[ "$(printf '%s\n' "$menu_output" | wc -l)" == 10 ]]
 
 [[ "$(FZF_WRAP='' "$VIEW_ACTIONS" recent)" == 'change-prompt(recent  )+toggle-wrap-word' ]]
 [[ "$(FZF_WRAP=word "$VIEW_ACTIONS" recent)" == 'change-prompt(recent  )' ]]

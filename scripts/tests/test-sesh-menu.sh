@@ -6,6 +6,7 @@ REPO_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 SESH_DIR="${REPO_DIR}/.config/sesh"
 TMUX_CONFIG="${REPO_DIR}/.config/tmux/tmux.conf"
 MENU_SCRIPT="${REPO_DIR}/scripts/tmux/sesh-sessions/sesh-menu"
+MENU_RENAME_SCRIPT="${REPO_DIR}/scripts/tmux/sesh-sessions/rename-session"
 WIDGET_SCRIPT="${REPO_DIR}/scripts/tmux/sesh-sessions/sesh-sessions"
 RENAME_SCRIPT="${SESH_DIR}/scripts/tmux_rename_vim_file"
 NVIM_SCRIPT="${SESH_DIR}/scripts/nvim_file_session"
@@ -38,7 +39,11 @@ case "$1" in
     printf '%s' "${FAKE_TMUX_SESSIONS:-}"
     ;;
   rename-session)
-    printf '%s' "$2" >"$TMUX_RENAME_LOG"
+    if [[ "${2:-}" == -t ]]; then
+      printf 'arg=%s\n' "$@" >"$TMUX_RENAME_LOG"
+    else
+      printf '%s' "$2" >"$TMUX_RENAME_LOG"
+    fi
     ;;
   kill-session)
     printf '%s' "$3" >"$TMUX_KILL_LOG"
@@ -161,6 +166,7 @@ menu_source="$(<"$MENU_SCRIPT")"
 assert_contains "$menu_source" 'ctrl-e:transform('
 assert_contains "$menu_source" '--open-action {1} {2} {3}'
 assert_contains "$menu_source" 'ctrl-r:transform($SCRIPT_DIR/fzf-view-actions recent)'
+assert_contains "$menu_source" 'f2:execute($SCRIPT_DIR/rename-session {1} {2})'
 
 actions_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list actions)"
 configs_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list configs)"
@@ -200,11 +206,62 @@ TMUX_KILL_LOG="$tmp_dir/tmux-kill.log" PATH="$tmp_dir/bin:$PATH" \
   "$MENU_SCRIPT" --kill 'vim-example.lua' 'tmux'
 assert_eq "$(<"$tmp_dir/tmux-kill.log")" 'vim-example.lua'
 
+cat >"$tmp_dir/bin/fzf" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ -z "${FZF_ARGS_LOG:-}" ]] || printf '%s\n' "$@" >"$FZF_ARGS_LOG"
+[[ "${FAKE_FZF_STATUS:-0}" == 0 ]] || exit "$FAKE_FZF_STATUS"
+printf '%s' "${FAKE_FZF_OUTPUT:-}"
+EOF
+chmod +x "$tmp_dir/bin/fzf"
+
+rm -f "$tmp_dir/tmux-menu-rename.log" "$tmp_dir/fzf-rename.log"
+FAKE_FZF_OUTPUT='new name; $HOME *' \
+  FZF_ARGS_LOG="$tmp_dir/fzf-rename.log" \
+  TMUX_RENAME_LOG="$tmp_dir/tmux-menu-rename.log" \
+  PATH="$tmp_dir/bin:$PATH" \
+  "$MENU_RENAME_SCRIPT" 'old session' 'tmux'
+assert_eq "$(<"$tmp_dir/tmux-menu-rename.log")" \
+  $'arg=rename-session\narg=-t\narg=old session\narg=new name; $HOME *'
+rename_fzf_args="$(<"$tmp_dir/fzf-rename.log")"
+assert_contains "$rename_fzf_args" '--query'
+assert_contains "$rename_fzf_args" 'old session'
+assert_contains "$rename_fzf_args" 'enter:print-query+accept,esc:abort'
+
+rm -f "$tmp_dir/tmux-menu-rename.log" "$tmp_dir/fzf-rename.log"
+FZF_ARGS_LOG="$tmp_dir/fzf-rename.log" \
+  TMUX_RENAME_LOG="$tmp_dir/tmux-menu-rename.log" \
+  PATH="$tmp_dir/bin:$PATH" \
+  "$MENU_RENAME_SCRIPT" 'cfg-sesh' 'config'
+if [[ -e "$tmp_dir/tmux-menu-rename.log" || -e "$tmp_dir/fzf-rename.log" ]]; then
+  printf 'Non-tmux rows must not open the rename prompt or call tmux\n' >&2
+  exit 1
+fi
+
+FAKE_FZF_OUTPUT='' \
+  TMUX_RENAME_LOG="$tmp_dir/tmux-menu-rename.log" \
+  PATH="$tmp_dir/bin:$PATH" \
+  "$MENU_RENAME_SCRIPT" 'old session' 'tmux'
+if [[ -e "$tmp_dir/tmux-menu-rename.log" ]]; then
+  printf 'An empty name must not rename the session\n' >&2
+  exit 1
+fi
+
+FAKE_FZF_STATUS=130 \
+  TMUX_RENAME_LOG="$tmp_dir/tmux-menu-rename.log" \
+  PATH="$tmp_dir/bin:$PATH" \
+  "$MENU_RENAME_SCRIPT" 'old session' 'tmux'
+if [[ -e "$tmp_dir/tmux-menu-rename.log" ]]; then
+  printf 'Cancelling the prompt must not rename the session\n' >&2
+  exit 1
+fi
+
 tmux_header="$("$MENU_SCRIPT" --header 'tmux' 'session')"
 file_header="$("$MENU_SCRIPT" --header 'config' 'file')"
 directory_header="$("$MENU_SCRIPT" --header 'project' 'directory')"
 opencode_header="$("$MENU_SCRIPT" --header 'opencode' 'session')"
 assert_contains "$tmux_header" '^d kill'
+assert_contains "$tmux_header" 'F2 rename'
 assert_not_contains "$tmux_header" '^e explorer'
 assert_contains "$file_header" '^/ search'
 assert_not_contains "$file_header" '^e explorer'
