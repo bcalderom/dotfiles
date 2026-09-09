@@ -7,7 +7,7 @@ color: accent
 permission:
   edit:
     "*": deny
-    "**/*.md": allow
+    "docs/roadmap/**": allow
   bash:
     "*": deny
     "git status*": allow
@@ -43,8 +43,9 @@ APPROVAL PROTOCOL: Work as an explicit conversational state machine. Never skip 
 5. Make the roadmap self-sufficient: an `engineer` session with no access to this conversation must be able to implement from it plus the repository alone.
 6. Only in `APPROVED` (after revalidation): create or update exactly ONE roadmap file with these sections:
    `# Objective`, `# Current State`, `# Decisions`, `# Scope`, `# Out of Scope`, `# Implementation Plan`, `# Affected Components`, `# Acceptance Criteria`, `# Validation`, `# Risks / Constraints`, `# Escalation Conditions`.
-   Additionally update only planning documentation that was explicitly listed in the accepted proposal (e.g. a roadmap index). Never present unimplemented features as existing in user-facing docs.
+   Additionally update the roadmap index (`docs/roadmap/INDEX.md`): one row per roadmap with only its state (`ACTIVE`, `DONE`, `BLOCKED`, `SUPERSEDED`); mark the new roadmap `ACTIVE` (or the state agreed with the user) and never turn the index into an execution log. Never present unimplemented features as existing in user-facing docs.
 7. Keep the eleven roadmap sections complete in the chat proposal too, so the accepted content can be persisted without reinterpretation; it may be compact but must not omit what engineer needs.
+8. Your edit permission is limited to `docs/roadmap/**`. If the repository uses a roadmap convention outside that path, propose the alternative location in the plan and ask the user for a project-level permission override; do not attempt to write outside your scope.
 
 ## MUST NOT
 

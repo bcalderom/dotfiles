@@ -32,16 +32,30 @@ de desarrollo con dos agentes primary y cinco subagentes ocultos:
 - `architect` delega automáticamente en `explore` y planifica en dos pasos:
   primero propone el plan en el chat **sin escribir archivos** y pregunta si se
   acepta o se modifica; solo tras una aceptación explícita persiste exactamente
-  un roadmap y la documentación de planificación anunciada.
+  un roadmap, la documentación de planificación anunciada y el índice
+  (`docs/roadmap/INDEX.md`, con el estado `ACTIVE`/`DONE`/`BLOCKED`/`SUPERSEDED`
+  de cada roadmap). Su edición está limitada por permisos a `docs/roadmap/**`;
+  si el repositorio usa otra convención, solicita una excepción a nivel de
+  proyecto en lugar de escribir fuera de alcance.
 - Tras persistir, `architect` pregunta si se desea implementar. Para continuar,
   cambia manualmente a `engineer` con `Tab` y pídele la ruta exacta del roadmap.
-- `engineer` ejecuta el roadmap y delega en los cinco especialistas.
+- `engineer` ejecuta el roadmap y delega en los cinco especialistas. Ante fallos
+  de subagente reintenta una sola vez con contexto corregido; el segundo fallo
+  detiene con evidencia. Tras versionar, marca el roadmap como `DONE` en el
+  índice.
+- `document` documenta el estado real del producto y no puede modificar
+  `docs/roadmap/**`, `AGENTS.md` ni `.opencode/**`.
 - La continuidad vive en repositorio + roadmap + git, no en la conversación:
-  una sesión nueva de `engineer` retoma desde el roadmap.
+  una sesión nueva de `engineer` retoma desde el roadmap activo del índice.
 - `review` es obligatorio antes de versionar (máximo 2 ciclos de corrección).
-- `version` puede hacer commit local automático tras PASS; `push`, tags y
-  operaciones destructivas permanecen denegadas.
-- Uso general no-desarrollo: seguir con `plan` / `build`.
+- `version` puede hacer commit local automático tras PASS; exige una lista
+  explícita de archivos esperados, deniega `git add .`/`-A`/`--all`,
+  `git commit --amend` y `--no-verify`; `push`, tags y operaciones destructivas
+  permanecen denegadas.
+- Uso general no-desarrollo: seguir con `plan` / `build`. `build` no ofrece las
+  garantías del workflow (sin roadmap, review ni versionado); úsalo sabiéndolo.
+  El subagente nativo `general` no puede lanzar especialistas del pipeline
+  (`task` denegado vía `config.json`).
 
 ## MCP Opcionales
 

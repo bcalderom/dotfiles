@@ -41,6 +41,14 @@ assert "explore" not in base.get("agent", {}), (
     "explore must be defined in agent/explore.md only"
 )
 
+# general (native subagent) must not launch pipeline specialists.
+# NOTE: the task deny must live under permission.task; a top-level "task" key
+# is routed to options and silently ignored (verified against opencode 1.18.29).
+general = base.get("agent", {}).get("general", {})
+assert general.get("permission", {}).get("task") == "deny", (
+    "native general agent must deny task under permission.task in config.json"
+)
+
 agents_dir = root / "agent"
 present = {p.stem for p in agents_dir.glob("*.md")}
 assert required <= present, f"missing agents: {sorted(required - present)}"
@@ -106,18 +114,55 @@ assert "user action (Tab" in architect, (
     "architect must not claim it can switch agents itself"
 )
 
-# architect: preserved permission map (markdown-only edits, read-only git).
-assert '"**/*.md": allow' in architect
+# engineer: subagent failure policy (bounded retries, no advisor for transport failures).
+assert "SUBAGENT FAILURE POLICY" in engineer
+assert "DELEGATION MINIMUMS" in engineer
+assert "expected file list" in engineer, (
+    "engineer must pass the expected file list to version"
+)
+
+# architect: preserved permission map (roadmap-only edits, read-only git).
+assert '"docs/roadmap/**": allow' in architect, (
+    "architect must be limited to roadmap edits"
+)
+assert '"**/*.md": allow' not in architect, (
+    "architect must not edit arbitrary markdown"
+)
 assert '"git status*": allow' in architect
 for blocked in ("git push*", "git commit*", "git reset*"):
     assert f'"{blocked}"' not in architect or \
         f'"{blocked}": deny' in architect, f"architect must not allow {blocked}"
 assert "explore: allow" in architect
 
+# architect: roadmap index contract (mechanically resolvable active roadmap).
+assert "docs/roadmap/INDEX.md" in architect, (
+    "architect must maintain the roadmap index"
+)
+assert "INDEX.md" in engineer, "engineer must mark roadmaps DONE in the index"
+for state in ("ACTIVE", "DONE", "BLOCKED", "SUPERSEDED"):
+    assert state in architect, f"architect index states must include {state}"
+
+# document: product docs only; planning and config boundaries are permission-enforced.
+document = (agents_dir / "document.md").read_text(encoding="utf-8")
+for blocked in ("**/docs/roadmap/**", "docs/roadmap/**", "AGENTS.md", "**/AGENTS.md", "**/.opencode/**"):
+    assert f'"{blocked}": deny' in document, f"document must deny {blocked}"
+
 version = (agents_dir / "version.md").read_text(encoding="utf-8")
 for blocked in ("git push*", "git tag*", "git clean*", "git reset*", "git rebase*"):
     assert f'"{blocked}": deny' in version, f"version must deny {blocked}"
+for blocked in ("git add .", "git add ./", "git add -A*", "git add --all*",
+                "git commit --amend*", "git commit --no-verify*"):
+    assert f'"{blocked}": deny' in version, f"version must deny {blocked}"
 assert '"git commit*": allow' in version
+assert '"git add*": allow' in version
+# Ordering: specific denies must appear after the broad allows (last match wins).
+assert version.index('"git add*": allow') < version.index('"git add -A*": deny')
+assert version.index('"git commit*": allow') < version.index('"git commit --amend*": deny')
+# version: explicit expected-file-list contract.
+assert "expected file list" in version, (
+    "version must require the expected file list from the invoker"
+)
+assert "--amend" in version and "--no-verify" in version
 
 documents = [(root / "config.json", base)]
 
