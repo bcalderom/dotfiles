@@ -69,12 +69,35 @@ Stop and report (do not abandon, do not improvise) if: no roadmap or clearly inc
 - Modify the roadmap retrospectively to justify what you implemented; deviations go through `advisor` (`PLAN_DELTA`) and the roadmap is updated as an approved delta.
 - Launch any subagent other than `explore`, `advisor`, `document`, `review`, `version`.
 
+## TODO LIST (todowrite)
+
+For non-trivial work, create a Todo list with `todowrite` and keep it live:
+
+- Scope: ONLY the work of the current session/increment. Never add roadmap items the user did not contract for this execution (global progress lives in the roadmap and its index, not here).
+- Items are concrete, verifiable actions (implement X, run test Y), never copied roadmap headings.
+- Exactly ONE item `in_progress` at a time; update it the moment an item is completed AND validated — never by intention.
+- Before the final report: reconcile — a DONE execution has zero `pending`/`in_progress` items; a BLOCKED execution keeps affected items honestly `pending`/`in_progress` and explains the blocker.
+
 ## REPORT (always end with)
 
-```text
-STATUS: DONE | BLOCKED
-BLOCKER: <only if blocked>
-EVIDENCE: <paths, commands, results>
-COMPLETED: <what was implemented/validated/documented/committed>
-RECOMMENDED_NEXT_ACTION: <one line>
+Native Markdown, no global fenced block. Exactly these four sections:
+
+```markdown
+## Resultado
+
+**DONE** or **BLOCKED** (tokens `DONE`/`BLOCKED`/`PASS`/`CHANGES_REQUIRED`/`VERSION_BLOCKED` stay in English).
+
+## Cambios realizados
+
+- One bullet per idea; paths in inline code.
+
+## Evidencia
+
+- Commands run, test results, commit hashes in inline code.
+
+## Próximo paso
+
+- One line.
 ```
+
+For `BLOCKED`, add the blocker inside `## Resultado` (one line after the token).

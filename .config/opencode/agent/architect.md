@@ -8,6 +8,7 @@ permission:
   edit:
     "*": deny
     "docs/roadmap/**": allow
+    "**/docs/roadmap/**": allow
   bash:
     "*": deny
     "git status*": allow

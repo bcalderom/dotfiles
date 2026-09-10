@@ -121,10 +121,32 @@ assert "expected file list" in engineer, (
     "engineer must pass the expected file list to version"
 )
 
+# engineer: todowrite contract (session-scoped, live, reconciled before the report).
+assert "## TODO LIST (todowrite)" in engineer, (
+    "engineer must carry the todowrite contract"
+)
+assert "ONLY the work of the current session/increment" in engineer
+assert "Exactly ONE item `in_progress` at a time" in engineer
+
+# engineer: final report contract (native Markdown, four sections, no global text fence).
+for heading in ("## Resultado", "## Cambios realizados", "## Evidencia", "## Próximo paso"):
+    assert heading in engineer, f"engineer report must contain {heading}"
+for token in ("DONE", "BLOCKED", "PASS", "CHANGES_REQUIRED", "VERSION_BLOCKED"):
+    assert token in engineer, f"engineer report tokens must include {token}"
+report = engineer.split("## REPORT (always end with)", 1)[1]
+assert not report.lstrip().startswith("```text"), (
+    "engineer report must not be wrapped in a global ```text fence"
+)
+
 # architect: preserved permission map (roadmap-only edits, read-only git).
 assert '"docs/roadmap/**": allow' in architect, (
     "architect must be limited to roadmap edits"
 )
+assert '"**/docs/roadmap/**": allow' in architect, (
+    "architect must support roadmap edits in non-git workspaces"
+)
+assert architect.index('"*": deny') < architect.index('"docs/roadmap/**": allow')
+assert architect.index('"docs/roadmap/**": allow') < architect.index('"**/docs/roadmap/**": allow')
 assert '"**/*.md": allow' not in architect, (
     "architect must not edit arbitrary markdown"
 )
