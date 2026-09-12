@@ -2,7 +2,8 @@
 description: Documentation subagent that updates real-state docs (API, CLI, config, runbooks) and can return DOCUMENTATION_NOT_REQUIRED. Does not repeat the roadmap.
 mode: subagent
 hidden: true
-model: opencode/glm-5.3-flash
+model: openai/gpt-5.6-luna
+variant: low
 steps: 12
 color: info
 permission:

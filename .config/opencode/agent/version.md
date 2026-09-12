@@ -2,7 +2,8 @@
 description: Versioning subagent. After a review PASS, inspects git state, stages intended files, creates one conventional local commit. Never publishes or destroys.
 mode: subagent
 hidden: true
-model: opencode/glm-5.3-flash
+model: openai/gpt-5.6-luna
+variant: low
 steps: 10
 color: success
 permission:

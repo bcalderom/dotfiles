@@ -71,12 +71,12 @@ for name in required:
 
 expectations = {
     "architect": {"mode": "primary", "model": "openai/gpt-5.6-sol", "variant": "medium"},
-    "engineer": {"mode": "primary", "model": "opencode/glm-5.3-flash"},
-    "explore": {"mode": "subagent", "hidden": "true", "model": "opencode/glm-5.3-flash", "variant": "low"},
+    "engineer": {"mode": "primary", "model": "openai/gpt-5.6-luna", "variant": "medium"},
+    "explore": {"mode": "subagent", "hidden": "true", "model": "openai/gpt-5.6-luna", "variant": "low"},
     "advisor": {"mode": "subagent", "hidden": "true", "model": "openai/gpt-5.6-sol", "variant": "high"},
-    "document": {"mode": "subagent", "hidden": "true", "model": "opencode/glm-5.3-flash"},
-    "review": {"mode": "subagent", "hidden": "true", "model": "opencode/glm-5.3-flash"},
-    "version": {"mode": "subagent", "hidden": "true", "model": "opencode/glm-5.3-flash"},
+    "document": {"mode": "subagent", "hidden": "true", "model": "openai/gpt-5.6-luna", "variant": "low"},
+    "review": {"mode": "subagent", "hidden": "true", "model": "openai/gpt-5.6-luna", "variant": "medium"},
+    "version": {"mode": "subagent", "hidden": "true", "model": "openai/gpt-5.6-luna", "variant": "low"},
 }
 for name, expected in expectations.items():
     for key, value in expected.items():

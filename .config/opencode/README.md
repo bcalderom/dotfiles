@@ -22,12 +22,12 @@ de desarrollo con dos agentes primary y cinco subagentes ocultos:
 | Agente | Tipo | Modelo | Función |
 |---|---|---|---|
 | `architect` | primary | GPT-5.6 Sol (`medium`) | Planificación y roadmap persistente |
-| `engineer` | primary | GLM-5.3-Flash | Implementación y orquestación |
-| `explore` | subagent | GLM-5.3-Flash (`low`) | Descubrimiento read-only |
+| `engineer` | primary | GPT-5.6 Luna (`medium`) | Implementación y orquestación |
+| `explore` | subagent | GPT-5.6 Luna (`low`) | Descubrimiento read-only |
 | `advisor` | subagent | GPT-5.6 Sol (`high`) | Escalamiento excepcional |
-| `document` | subagent | GLM-5.3-Flash | Documentación del estado real |
-| `review` | subagent | GLM-5.3-Flash | Auditoría independiente (PASS/CHANGES_REQUIRED) |
-| `version` | subagent | GLM-5.3-Flash | Commit local tras PASS; nunca publica |
+| `document` | subagent | GPT-5.6 Luna (`low`) | Documentación del estado real |
+| `review` | subagent | GPT-5.6 Luna (`medium`) | Auditoría independiente (PASS/CHANGES_REQUIRED) |
+| `version` | subagent | GPT-5.6 Luna (`low`) | Commit local tras PASS; nunca publica |
 
 - `architect` delega automáticamente en `explore` y planifica en dos pasos:
   primero propone el plan en el chat **sin escribir archivos** y pregunta si se

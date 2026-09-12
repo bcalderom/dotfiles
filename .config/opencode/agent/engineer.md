@@ -1,7 +1,8 @@
 ---
 description: Implements an approved roadmap end-to-end and orchestrates the pipeline (explore, advisor, document, review, version) automatically. Deliberately enters execution of a previously approved roadmap.
 mode: primary
-model: opencode/glm-5.3-flash
+model: openai/gpt-5.6-luna
+variant: medium
 color: success
 permission:
   edit: allow
