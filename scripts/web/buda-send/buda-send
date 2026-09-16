@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SERVER="${BUDA_SERVER:-home_docker}"
+CONTENT_ROOT="${BUDA_CONTENT_ROOT:-/docker/hugo/site/content}"
+DRAFT=false
+
+usage() {
+  cat <<'EOF'
+Uso:
+  buda-send <archivo.md>
+  buda-send --draft <archivo.md>
+  buda-send -d <archivo.md>
+
+Por defecto publica inmediatamente (draft = false).
+Use --draft o -d para dejar la publicacion como borrador.
+
+Configuracion opcional:
+  BUDA_SERVER        Host SSH (predeterminado: home_docker)
+  BUDA_CONTENT_ROOT  Raiz remota del contenido
+EOF
+}
+
+die() {
+  echo "Error: $*" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  --draft | -d)
+    DRAFT=true
+    shift
+    ;;
+esac
+
+if [[ $# -ne 1 ]]; then
+  usage >&2
+  exit 1
+fi
+
+FILE="$1"
+
+[[ -f "$FILE" ]] || die "no existe el archivo: $FILE"
+[[ "$FILE" == *.md ]] || die "el archivo debe tener extension .md"
+
+for command in ssh scp; do
+  command -v "$command" >/dev/null 2>&1 || die "no se encontro el comando: $command"
+done
+
+REMOTE_DIR="$(ssh "$SERVER" 'umask 077; mktemp -d /tmp/buda-upload.XXXXXXXXXX')"
+if [[ ! "$REMOTE_DIR" =~ ^/tmp/buda-upload\.[[:alnum:]]+$ ]]; then
+  die "el servidor devolvio una ruta temporal inesperada"
+fi
+
+REMOTE_FILE="$REMOTE_DIR/source.md"
+printf -v REMOTE_DIR_Q '%q' "$REMOTE_DIR"
+printf -v REMOTE_FILE_Q '%q' "$REMOTE_FILE"
+printf -v CONTENT_ROOT_Q '%q' "$CONTENT_ROOT"
+printf -v DRAFT_Q '%q' "$DRAFT"
+
+cleanup_remote() {
+  # shellcheck disable=SC2029 # REMOTE_DIR_Q is escaped for the remote shell.
+  ssh "$SERVER" "rm -rf -- $REMOTE_DIR_Q" >/dev/null 2>&1 || true
+}
+
+trap cleanup_remote EXIT
+
+echo "Transfiriendo $(basename -- "$FILE") a $SERVER..."
+scp -- "$FILE" "$SERVER:$REMOTE_FILE"
+
+echo "Validando y clasificando publicacion..."
+
+# shellcheck disable=SC2029 # All interpolated values are escaped with printf %q.
+ssh "$SERVER" "bash -s -- $REMOTE_FILE_Q $CONTENT_ROOT_Q $DRAFT_Q" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+SOURCE="$1"
+CONTENT_ROOT="$2"
+DRAFT="$3"
+
+if [[ ! -f "$SOURCE" ]]; then
+  echo "Error: no existe el archivo temporal: $SOURCE" >&2
+  exit 1
+fi
+
+PUBLICATION_TYPE="$(
+  sed -n "1{/^+++$/!q}; 2,/^+++$/ { /^+++$/q; /^publication_type = ['\"]/ { s/^publication_type = ['\"]\([^'\"]*\)['\"]/\1/p; q; }; }" "$SOURCE"
+)"
+
+SLUG="$(
+  sed -n "1{/^+++$/!q}; 2,/^+++$/ { /^+++$/q; /^slug = ['\"]/ { s/^slug = ['\"]\([^'\"]*\)['\"]/\1/p; q; }; }" "$SOURCE"
+)"
+
+case "$PUBLICATION_TYPE" in
+  essay)
+    DESTINATION="$CONTENT_ROOT/essays"
+    ;;
+  note)
+    DESTINATION="$CONTENT_ROOT/notes"
+    ;;
+  *)
+    echo "Error: publication_type debe ser 'essay' o 'note'." >&2
+    exit 1
+    ;;
+esac
+
+if [[ -z "$SLUG" ]]; then
+  echo "Error: no se encontro slug en el frontmatter." >&2
+  exit 1
+fi
+
+if [[ ! "$SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  echo "Error: slug invalido: $SLUG" >&2
+  echo "Formato esperado: palabras-en-minusculas-separadas-por-guiones" >&2
+  exit 1
+fi
+
+if [[ -z "$(sed -n '1{/^+++$/!q}; 2,/^+++$/ { /^+++$/q; /^draft = / { p; q; }; }' "$SOURCE")" ]]; then
+  echo "Error: no se encontro 'draft = ...' en el frontmatter." >&2
+  exit 1
+fi
+
+mkdir -p -- "$DESTINATION"
+
+TARGET="$DESTINATION/$SLUG.md"
+
+if [[ -e "$TARGET" ]]; then
+  echo "Error: ya existe una publicacion con ese slug:" >&2
+  echo "$TARGET" >&2
+  exit 1
+fi
+
+TMP_TARGET="${TARGET}.tmp.$$"
+trap 'rm -f -- "$TMP_TARGET"' EXIT
+
+cp -- "$SOURCE" "$TMP_TARGET"
+
+if [[ "$DRAFT" == true ]]; then
+  sed -i '1,/^+++$/ { s/^draft = .*/draft = true/; }' "$TMP_TARGET"
+  STATUS="DRAFT"
+else
+  sed -i '1,/^+++$/ { s/^draft = .*/draft = false/; }' "$TMP_TARGET"
+  STATUS="PUBLICADO"
+fi
+
+if ! ln -- "$TMP_TARGET" "$TARGET"; then
+  echo "Error: ya existe una publicacion con ese slug:" >&2
+  echo "$TARGET" >&2
+  exit 1
+fi
+rm -f -- "$TMP_TARGET"
+trap - EXIT
+
+echo
+echo "Publicacion incorporada correctamente"
+echo "  Tipo:    $PUBLICATION_TYPE"
+echo "  Slug:    $SLUG"
+echo "  Estado:  $STATUS"
+echo "  Destino: $TARGET"
+REMOTE_SCRIPT
+
+trap - EXIT
+cleanup_remote
+
+echo
+echo "Proceso completado."

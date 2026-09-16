@@ -21,9 +21,11 @@ command_dirs=(
   ssh/ssf
   tmux/sesh-sessions
   tmux/tds
+  web/buda-send
 )
 
 bin_links=(
+  buda-send
   hypr-lid-deploy.sh
   kanata-deploy.sh
   netbird-audit.sh
