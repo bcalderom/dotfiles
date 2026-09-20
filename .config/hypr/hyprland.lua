@@ -25,6 +25,7 @@ local browser = "brave"
 -- Autostart
 hl.on("hyprland.start", function()
     hl.exec_cmd([[bash -lc 'dbus-update-activation-environment --systemd WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP; systemctl --user restart hypr-lid.service']])
+    hl.exec_cmd("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
     hl.exec_cmd("hypridle")
     hl.exec_cmd([[bash -lc 'sleep 0.5; waybar']])
     hl.exec_cmd("swaync")
@@ -70,8 +71,8 @@ hl.config({
         disable_hyprland_logo = true,
     },
     input = {
-        kb_layout = "us",
-        kb_variant = "",
+        kb_layout = "us,es",
+        kb_variant = ",",
         kb_model = "",
         kb_options = "",
         kb_rules = "",
@@ -110,6 +111,7 @@ hl.bind(mainMod .. " + W", hl.dsp.exec_cmd([[bash -lc 'pgrep -x waybar >/dev/nul
 hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m region --clipboard-only"))
 hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen())
 hl.bind(mainMod .. " + SHIFT + L", hl.dsp.exec_cmd("hyprlock"))
+hl.bind(mainMod .. " + ALT + space", hl.dsp.exec_cmd([[bash -lc '$HOME/.config/hypr/scripts/quick-menu.sh']]))
 
 hl.bind(mainMod .. " + h", hl.dsp.focus({ direction = "l" }))
 hl.bind(mainMod .. " + l", hl.dsp.focus({ direction = "r" }))

@@ -130,8 +130,8 @@ export FD_IGNORE_FILE=~/.config/ignore/global.ignore
 # ~~~~~~~~~~~~~~~ Aliases ~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Quick keyboard layout switch aliases
-alias kmus='hyprctl keyword input:kb_layout us && echo "KB: us"'
-alias kmes='hyprctl keyword input:kb_layout es && echo "KB: es"'
+alias kus='~/.config/hypr/scripts/quick-menu.sh keyboard-us'
+alias kes='~/.config/hypr/scripts/quick-menu.sh keyboard-es'
 
 # ss
 alias vt='sudo ss -lntp'        # TCP listening ports
