@@ -1,6 +1,7 @@
 {
 	"spellCheckerLanguages": [
-		"es-419"
+		"es-419",
+		"en"
 	],
 	"followSystemTheme": false,
 	"disableGpu": true,
