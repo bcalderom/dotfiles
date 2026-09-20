@@ -7,7 +7,7 @@
 * {
   border: none;
   border-radius: 0;
-  font-family: "MesloLGS Nerd Font Mono Bold";
+  font-family: "JetBrainsMono Nerd Font";
   font-size: 16px;
   min-height: 0;
 }
@@ -31,13 +31,16 @@ window#waybar {
 #workspaces,
 #tray,
 #battery,
+#backlight,
 #power-profiles-daemon,
 #pulseaudio,
 #network,
-#disk,
+#custom-storage,
 #temperature,
 #cpu,
-#memory {
+#memory,
+#privacy,
+#custom-notification {
   margin: 5px 4px;
   padding: 0 10px;
 }
@@ -128,10 +131,13 @@ tooltip label {
 #power-profiles-daemon,
 #pulseaudio,
 #network,
-#disk,
+#backlight,
+#custom-storage,
 #temperature,
 #cpu,
-#memory {
+#memory,
+#privacy,
+#custom-notification {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 12px;
@@ -147,11 +153,43 @@ tooltip label {
 #power-profiles-daemon:hover,
 #pulseaudio:hover,
 #network:hover,
-#disk:hover,
+#backlight:hover,
+#custom-storage:hover,
 #temperature:hover,
 #cpu:hover,
-#memory:hover {
+#memory:hover,
+#privacy:hover,
+#custom-notification:hover {
   background: rgba(255, 255, 255, 0.10);
+}
+
+#custom-storage.warning {
+  color: #f39c12;
+}
+
+#custom-storage.critical {
+  color: #f53c3c;
+}
+
+#custom-notification.notification {
+  color: #f9e2af;
+}
+
+#custom-notification.dnd-notification,
+#custom-notification.dnd-none,
+#custom-notification.inhibited-notification,
+#custom-notification.inhibited-none,
+#custom-notification.dnd-inhibited-notification,
+#custom-notification.dnd-inhibited-none {
+  color: #a6adc8;
+}
+
+#privacy-item.screenshare {
+  color: #f9e2af;
+}
+
+#privacy-item.audio-in {
+  color: #f38ba8;
 }
 
 /* Temperature critical state */

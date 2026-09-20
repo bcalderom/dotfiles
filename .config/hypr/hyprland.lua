@@ -120,7 +120,6 @@ hl.bind(mainMod .. " + j", hl.dsp.focus({ direction = "d" }))
 
 hl.bind("SUPER + N", hl.dsp.exec_cmd("swaync-client -t"))
 hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("swaync-client -d"))
-hl.bind("SUPER + M", hl.dsp.exec_cmd("swaync-client -C"))
 
 for i = 1, 10 do
     local key = i % 10

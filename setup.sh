@@ -30,6 +30,7 @@ PKGS_BASE=(
   tmux
   util-linux
   ripgrep
+  jq
   fd
   eza
   neovim
@@ -63,10 +64,12 @@ PKGS_HYPR=(
 PKGS_UI=(
   alacritty
   waybar
-  mako
+  swaync
   rofi
   brightnessctl
+  network-manager-applet
   pavucontrol
+  power-profiles-daemon
   swappy
   obsidian
 )
