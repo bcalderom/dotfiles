@@ -30,6 +30,7 @@ PKGS_BASE=(
   tmux
   util-linux
   ripgrep
+  go-yq
   jq
   fd
   eza

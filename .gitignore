@@ -145,3 +145,4 @@ lambda_package/
 .config/marktext/
 .config/systemd/user/
 .config/opencode/package-lock.json
+!.config/opencode/.gitignore

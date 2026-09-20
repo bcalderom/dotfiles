@@ -25,18 +25,18 @@ root = Path(sys.argv[1])
 required = set(sys.argv[2:9])
 removed = set(sys.argv[9:11])
 
-base = json.loads((root / "config.json").read_text(encoding="utf-8"))
+base = json.loads((root / "opencode.json").read_text(encoding="utf-8"))
 
 assert base["share"] == "disabled"
 assert base["autoupdate"] == "notify"
 assert base["small_model"] == "openai/gpt-5.5"
 assert base["subagent_depth"] == 1
-assert len(base["mcp"]) == 16
+assert len(base["mcp"]) == 3
 assert {
     name for name, mcp in base["mcp"].items() if mcp.get("enabled", True)
 } == {"context7", "jcodemunch"}
 
-# explore is defined as a file agent, not in config.json.
+# explore is defined as a file agent, not in opencode.json.
 assert "explore" not in base.get("agent", {}), (
     "explore must be defined in agent/explore.md only"
 )
@@ -46,7 +46,7 @@ assert "explore" not in base.get("agent", {}), (
 # is routed to options and silently ignored (verified against opencode 1.18.29).
 general = base.get("agent", {}).get("general", {})
 assert general.get("permission", {}).get("task") == "deny", (
-    "native general agent must deny task under permission.task in config.json"
+    "native general agent must deny task under permission.task in opencode.json"
 )
 
 agents_dir = root / "agent"
@@ -186,7 +186,7 @@ assert "expected file list" in version, (
 )
 assert "--amend" in version and "--no-verify" in version
 
-documents = [(root / "config.json", base)]
+documents = [(root / "opencode.json", base)]
 
 for path, payload in documents:
     for mcp in payload.get("mcp", {}).values():
@@ -200,33 +200,29 @@ for path, payload in documents:
         )
 PY
 
-bash -n "$config_root/toolbox/wisemin-mysql-mcp"
-
-if MYSQL_SSH_TARGET=unsupported \
-  "$config_root/toolbox/wisemin-mysql-mcp" >/dev/null 2>&1; then
-  fail "MySQL wrapper must reject unknown SSH targets"
-fi
-
-if grep -qF 'MonitoreoCenizas' "$config_root/toolbox/wisemin-mysql.yaml"; then
-  fail "target-specific diagnostics must not live in the common MySQL config"
-fi
-grep -qF 'MonitoreoCenizas' "$config_root/toolbox/cenizas-diagnostics.yaml" || \
-  fail "Cenizas diagnostics are missing"
-
 if command -v yq >/dev/null 2>&1; then
   while IFS= read -r -d '' yaml_file; do
     yq eval-all 'true' "$yaml_file" >/dev/null
-  done < <(find "$config_root/toolbox" -type f -name '*.yaml' -print0)
+  done < <(find "$config_root/toolbox/examples" -type f -name '*.yaml' -print0)
 fi
 
-if git -C "$repo_root" check-ignore -q "$relative_root/config.json"; then
-  fail "config.json must be tracked"
+if [[ -f "$config_root/config.local.json" ]]; then
+  python3 -m json.tool "$config_root/config.local.json" >/dev/null
+fi
+if [[ -d "$config_root/toolbox/local" ]]; then
+  while IFS= read -r -d '' local_script; do
+    bash -n "$local_script"
+  done < <(find "$config_root/toolbox/local" -type f -perm -0100 -print0)
+fi
+
+if git -C "$repo_root" check-ignore -q "$relative_root/opencode.json"; then
+  fail "opencode.json must be tracked"
 fi
 if git -C "$repo_root" check-ignore -q "$relative_root/.gitignore"; then
   fail ".gitignore must be tracked"
 fi
 
-for ignored in secrets/example.token skills/example/SKILL.md node_modules/example; do
+for ignored in config.local.json toolbox/local/example secrets/example.token skills/example/SKILL.md node_modules/example; do
   if ! git -C "$repo_root" check-ignore -q "$relative_root/$ignored"; then
     fail "$ignored must remain ignored"
   fi

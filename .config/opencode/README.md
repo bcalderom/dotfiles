@@ -5,10 +5,12 @@ GNU Stow lo expone como `~/.config/opencode`.
 
 ## Contenido
 
-- `config.json`: configuración base cargada en todas las sesiones.
+- `opencode.json`: configuración pública base cargada en todas las sesiones.
+- `config.local.json`: overlay privado opcional, ignorado por Git.
 - `AGENTS.md`: reglas globales mínimas; cada repositorio puede ampliarlas.
 - `agent/`: subagentes genéricos y reutilizables.
-- `toolbox/`: wrapper y consultas de diagnóstico MySQL de solo lectura.
+- `toolbox/examples/`: plantillas públicas de diagnóstico de solo lectura.
+- `toolbox/local/`: wrappers y consultas privadas, ignorados por Git.
 - `tests/`: validaciones locales que no requieren infraestructura activa.
 
 Las Skills instaladas y los archivos generados por OpenCode no son fuente
@@ -55,23 +57,27 @@ de desarrollo con dos agentes primary y cinco subagentes ocultos:
 - Uso general no-desarrollo: seguir con `plan` / `build`. `build` no ofrece las
   garantías del workflow (sin roadmap, review ni versionado); úsalo sabiéndolo.
   El subagente nativo `general` no puede lanzar especialistas del pipeline
-  (`task` denegado vía `config.json`).
+  (`task` denegado vía `opencode.json`).
 
 ## MCP Opcionales
 
-Playwright, Grafana y MySQL están declarados con `enabled: false`. No inician
-procesos, no se conectan ni publican herramientas hasta que los habilitas desde
-el selector MCP de OpenCode.
+Playwright está declarado en la configuración pública con `enabled: false`.
+Grafana, MySQL y cualquier otro MCP privado se declaran exclusivamente en
+`config.local.json`, tomando `config.local.example.json` como referencia.
+Ningún servidor opcional inicia procesos ni se conecta hasta que lo habilitas
+desde el selector MCP de OpenCode.
 
 Abre la paleta con `Ctrl+;`, busca la opción de MCP y cambia el interruptor del
 servidor requerido. Vuelve a cambiarlo para desconectarlo. La activación dura
-solo durante la instancia actual; al reiniciar vuelve al valor de `config.json`.
+solo durante la instancia actual; al reiniciar vuelve al valor de `opencode.json`.
 
 También puedes revisar todos los estados con `opencode mcp list`.
 
-Los perfiles MySQL comparten el mismo usuario y contraseña. Antes de utilizarlos,
-comprueba en cada destino que la cuenta mantenga exclusivamente permisos de
-lectura. El wrapper no modifica grants ni configuración del servidor.
+Para cargar el overlay, la configuración de Zsh define `OPENCODE_CONFIG` solo
+cuando `config.local.json` existe. Los archivos privados bajo `toolbox/local/`
+pueden contener nombres de infraestructura y no deben copiarse a las plantillas
+públicas. Antes de usar un perfil de base de datos, comprueba que la cuenta tenga
+exclusivamente permisos de lectura.
 
 ## Secretos
 

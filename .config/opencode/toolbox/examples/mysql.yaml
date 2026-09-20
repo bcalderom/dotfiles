@@ -1,0 +1,25 @@
+kind: source
+name: private-mysql
+type: mysql
+host: ${MYSQL_HOST}
+port: ${MYSQL_PORT}
+database: ${MYSQL_DATABASE:}
+user: ${MYSQL_USER}
+password: ${MYSQL_PASSWORD}
+queryTimeout: 20s
+sqlCommenter: true
+---
+kind: tool
+name: mysql_storage_by_schema
+type: mysql-sql
+source: private-mysql
+description: Report allocated table and index storage by non-system schema without modifying data.
+statement: |
+  SELECT
+    table_schema,
+    ROUND(SUM(data_length + index_length) / 1024 / 1024 / 1024, 3) AS allocated_gib,
+    COUNT(*) AS table_count
+  FROM information_schema.tables
+  WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+  GROUP BY table_schema
+  ORDER BY SUM(data_length + index_length) DESC;

@@ -1,0 +1,15 @@
+node_modules/
+package.json
+package-lock.json
+bun.lock
+config.local.json
+secrets/
+skills/
+toolbox/local/
+
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials*.json

@@ -1,0 +1,18 @@
+kind: tool
+name: mysql_grafana_summary
+type: mysql-sql
+source: private-mysql
+description: Count Grafana organizations, dashboards, and datasources in an approved schema.
+statement: |
+  SELECT
+    (SELECT COUNT(*) FROM {{.schema}}.org) AS organization_count,
+    (SELECT COUNT(*) FROM {{.schema}}.dashboard WHERE is_folder = 0) AS dashboard_count,
+    (SELECT COUNT(*) FROM {{.schema}}.data_source) AS datasource_count;
+templateParameters:
+  - name: schema
+    type: string
+    description: Approved Grafana metadata schema.
+    allowedValues:
+      - grafana
+      - grafana_staging
+    escape: backticks

@@ -125,6 +125,7 @@ export VISUAL=nvim
 export EDITOR=nvim
 export BROWSER=brave
 export FD_IGNORE_FILE=~/.config/ignore/global.ignore
+[[ -r "$HOME/.config/opencode/config.local.json" ]] && export OPENCODE_CONFIG="$HOME/.config/opencode/config.local.json"
 
 
 # ~~~~~~~~~~~~~~~ Aliases ~~~~~~~~~~~~~~~~~~~~~~~~
