@@ -190,9 +190,10 @@ alias cd="z"
 
 # cd directories
 alias dot='cd ~/dotfiles'
-alias scripts='cd ~/scripts/'
-alias hypr='nvim ~/dotfiles/.config/hypr/hyprland.conf' 
+alias hypr='nvim ~/dotfiles/.config/hypr/hyprland.lua'
 alias dev='cd ~/Desarrollos'
+alias boris='cd ~/Downloads/boris/'
+alias books='cd ~/Downloads/boris/libros/'
 
 # Changing "ls" to "eza"
 # alias ls='eza -alg --color=always --group-directories-first' # my preferred listing
@@ -226,9 +227,6 @@ alias btsd='bluetoothctl disconnect AC:80:0A:4B:A7:CB'
 # Shell integrations
 eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
-
-# RDP connection to Invexsa's laptop
-#alias ivx='xfreerdp3 /args-from:ivxrdp &'
 
 # k8s
 #export KUBECONFIG=~/.kube/config
