@@ -140,5 +140,8 @@ lambda_package/
 .config/obs-studio/
 .config/zoom*
 .config/chromium/
+.config/Codex/
+.config/google-chrome-for-testing/
+.config/marktext/
 .config/systemd/user/
 .config/opencode/package-lock.json
