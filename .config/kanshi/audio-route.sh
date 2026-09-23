@@ -11,6 +11,67 @@ if command -v hyprctl >/dev/null 2>&1; then
   fi
 fi
 
+internal_card=""
+internal_profile=""
+headphones_available=0
+candidate_card=""
+candidate_profile=""
+candidate_has_headphones=0
+candidate_headphones_available=0
+
+select_candidate_card() {
+  case "$candidate_card" in
+    alsa_card.pci-*) ;;
+    *) return ;;
+  esac
+
+  if [ -z "$internal_card" ] && [ "$candidate_has_headphones" -eq 1 ]; then
+    internal_card="$candidate_card"
+    internal_profile="$candidate_profile"
+    headphones_available="$candidate_headphones_available"
+  fi
+}
+
+while IFS= read -r line; do
+  line="${line#"${line%%[![:space:]]*}"}"
+
+  case "$line" in
+    "Card #"*)
+      select_candidate_card
+      candidate_card=""
+      candidate_profile=""
+      candidate_has_headphones=0
+      candidate_headphones_available=0
+      ;;
+    "Name: "*)
+      candidate_card="${line#Name: }"
+      ;;
+    "Active Profile: "*)
+      candidate_profile="${line#Active Profile: }"
+      ;;
+    "[Out] Headphones: "*)
+      candidate_has_headphones=1
+      case "$line" in
+        *", available)"|*"available: yes"*|*"availability: yes"*) candidate_headphones_available=1 ;;
+      esac
+      ;;
+  esac
+done < <(pactl list cards)
+select_candidate_card
+
+if [ -n "$internal_card" ]; then
+  if [ "$headphones_available" -eq 1 ]; then
+    desired_internal_profile="HiFi (HDMI1, HDMI2, HDMI3, Headphones, Mic1, Mic2)"
+  else
+    desired_internal_profile="HiFi (HDMI1, HDMI2, HDMI3, Mic1, Mic2, Speaker)"
+  fi
+
+  if [ "$internal_profile" != "$desired_internal_profile" ]; then
+    pactl set-card-profile "$internal_card" "$desired_internal_profile" >/dev/null 2>&1 || true
+    sleep 0.2
+  fi
+fi
+
 external_sink=""
 hdmi_sink=""
 speaker_sink=""
@@ -75,52 +136,20 @@ while IFS=$'\t' read -r _ source_name _; do
   esac
 done < <(pactl list short sources)
 
-ensure_speaker_sink() {
-  if [ -n "$speaker_sink" ]; then
-    return
-  fi
-
-  local internal_card=""
-
-  while IFS=$'\t' read -r _ card_name _; do
-    case "$card_name" in
-      alsa_card.pci-*)
-        internal_card="$card_name"
-        break
-        ;;
-    esac
-  done < <(pactl list short cards)
-
-  [ -n "$internal_card" ] || return
-
-  pactl set-card-profile "$internal_card" "HiFi (HDMI1, HDMI2, HDMI3, Mic1, Mic2, Speaker)" >/dev/null 2>&1 || true
-  sleep 0.2
-
-  while IFS=$'\t' read -r _ sink_name _; do
-    case "$sink_name" in
-      *HiFi__Speaker__sink)
-        speaker_sink="$sink_name"
-        break
-        ;;
-    esac
-  done < <(pactl list short sinks)
-}
-
 target_sink=""
 
 if [ -n "$external_sink" ]; then
   target_sink="$external_sink"
 elif [ "$active_dp1" -eq 1 ] && [ -n "$hdmi_sink" ]; then
   target_sink="$hdmi_sink"
+elif [ -n "$headphones_sink" ]; then
+  target_sink="$headphones_sink"
+elif [ -n "$speaker_sink" ]; then
+  target_sink="$speaker_sink"
+elif [ -n "$hdmi_sink" ]; then
+  target_sink="$hdmi_sink"
 else
-  ensure_speaker_sink
-  if [ -n "$speaker_sink" ]; then
-    target_sink="$speaker_sink"
-  elif [ -n "$headphones_sink" ]; then
-    target_sink="$headphones_sink"
-  elif [ -n "$hdmi_sink" ]; then
-    target_sink="$hdmi_sink"
-  fi
+  target_sink=""
 fi
 
 target_source=""
