@@ -30,7 +30,7 @@
     },
     "jcodemunch": {
       "type": "local",
-      "command": ["uvx", "jcodemunch-mcp==1.108.317"],
+      "command": ["uvx", "jcodemunch-mcp==1.108.357"],
       "enabled": true
     },
     "playwright": {
@@ -38,7 +38,7 @@
       "command": [
         "npx",
         "-y",
-        "@playwright/mcp@0.0.80",
+        "@playwright/mcp@0.0.83",
         "--executable-path",
         "/usr/bin/chromium"
       ],

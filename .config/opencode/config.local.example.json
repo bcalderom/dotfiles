@@ -3,7 +3,7 @@
   "mcp": {
     "private-grafana": {
       "type": "local",
-      "command": ["uvx", "mcp-grafana==1.3.0"],
+      "command": ["uvx", "mcp-grafana==2.0.2", "--usage-stats=disabled"],
       "enabled": false,
       "environment": {
         "GRAFANA_URL": "https://grafana.example.com",
