@@ -149,7 +149,7 @@ sesh_output="$(sesh -C "$SESH_DIR/sesh.toml" list -c -j)"
 assert_contains "$sesh_output" '"Name":"vim-file"'
 assert_contains "$sesh_output" 'nvim_file_session --find-files'
 assert_contains "$sesh_output" '"Name":"cfg-opencode"'
-assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/opencode/config.json'
+assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/opencode/config.local.json'
 assert_contains "$sesh_output" 'EDITOR=/home/boris/.config/sesh/scripts/nvim_file_session onn'
 assert_contains "$sesh_output" 'nvim_file_session /home/boris/.zshrc'
 assert_contains "$sesh_output" 'nvim_file_session /home/boris/.config/tmux/tmux.conf'

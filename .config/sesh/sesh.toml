@@ -50,8 +50,8 @@ preview_command = "eza -alg --color=always --group-directories-first -- /home/bo
 [[session]]
 name = "cfg-opencode"
 path = "~/.config/opencode/"
-startup_command = "/home/boris/.config/sesh/scripts/nvim_file_session /home/boris/.config/opencode/config.json"
-preview_command = "sed '/CONTEXT7_API_KEY/d' /home/boris/.config/opencode/config.json"
+startup_command = "/home/boris/.config/sesh/scripts/nvim_file_session /home/boris/.config/opencode/config.local.json"
+preview_command = "sed '/CONTEXT7_API_KEY/d' /home/boris/.config/opencode/config.local.json"
 
 [[session]]
 name = "cfg-zshrc"
