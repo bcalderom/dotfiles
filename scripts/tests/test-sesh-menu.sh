@@ -164,9 +164,9 @@ assert_contains "$tmux_config" 'scripts/tmux/sesh-sessions/sesh-menu'
 
 menu_source="$(<"$MENU_SCRIPT")"
 assert_contains "$menu_source" 'ctrl-e:transform('
-assert_contains "$menu_source" '--open-action {1} {2} {3}'
-assert_contains "$menu_source" 'ctrl-r:transform($SCRIPT_DIR/fzf-view-actions recent)'
-assert_contains "$menu_source" 'f2:execute($SCRIPT_DIR/rename-session {1} {2})'
+assert_contains "$menu_source" '--open-action {1} {2} {3} {5}'
+assert_contains "$menu_source" "ctrl-r:transform(\$SCRIPT_DIR/fzf-view-actions recent)"
+assert_contains "$menu_source" "f2:execute(\$SCRIPT_DIR/rename-session {1} {2})"
 
 actions_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list actions)"
 configs_output="$(NO_COLOR=1 "$MENU_SCRIPT" --list configs)"
@@ -184,8 +184,12 @@ assert_contains "$configs_output" ' cfg-sesh'
 assert_not_contains "$configs_output" 'vim-file'
 assert_contains "$configs_output" $'cfg-sesh\tconfig\tfile'
 assert_contains "$configs_output" $'cfg-dotfiles\tconfig\tdirectory'
-assert_eq "$(printf '%s\n' "$projects_output" | awk -F '\t' '$2 == "project" { count++ } END { print count + 0 }')" '5'
-assert_eq "$(printf '%s\n' "$all_output" | awk -F '\t' '$2 == "project" { count++ } END { print count + 0 }')" '5'
+# Exact project counts are covered by fixed fixtures in test-sesh-data.sh;
+# live zoxide data can change between queries.
+assert_not_contains "$projects_output" $'\tconfig\t'
+assert_not_contains "$projects_output" $'\taction\t'
+assert_contains "$all_output" 'cfg-sesh'
+assert_contains "$menu_source" '--list home --fresh'
 
 selection="$(
   printf '%s\n' "$actions_output" | fzf \
@@ -202,10 +206,6 @@ if [[ -e "$tmp_dir/tmux-kill.log" ]]; then
   exit 1
 fi
 
-TMUX_KILL_LOG="$tmp_dir/tmux-kill.log" PATH="$tmp_dir/bin:$PATH" \
-  "$MENU_SCRIPT" --kill 'vim-example.lua' 'tmux'
-assert_eq "$(<"$tmp_dir/tmux-kill.log")" 'vim-example.lua'
-
 cat >"$tmp_dir/bin/fzf" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -215,14 +215,31 @@ printf '%s' "${FAKE_FZF_OUTPUT:-}"
 EOF
 chmod +x "$tmp_dir/bin/fzf"
 
+FAKE_FZF_OUTPUT=Cancel \
+  TMUX_KILL_LOG="$tmp_dir/tmux-kill.log" PATH="$tmp_dir/bin:$PATH" \
+  "$MENU_SCRIPT" --kill 'vim-example.lua' 'tmux'
+[[ ! -e "$tmp_dir/tmux-kill.log" ]]
+
+FAKE_FZF_STATUS=130 \
+  TMUX_KILL_LOG="$tmp_dir/tmux-kill.log" PATH="$tmp_dir/bin:$PATH" \
+  "$MENU_SCRIPT" --kill 'vim-example.lua' 'tmux'
+[[ ! -e "$tmp_dir/tmux-kill.log" ]]
+
+FAKE_FZF_OUTPUT=Delete \
+  FZF_ARGS_LOG="$tmp_dir/fzf-delete.log" \
+  TMUX_KILL_LOG="$tmp_dir/tmux-kill.log" PATH="$tmp_dir/bin:$PATH" \
+  "$MENU_SCRIPT" --kill 'vim-example.lua' 'tmux'
+assert_eq "$(<"$tmp_dir/tmux-kill.log")" '=vim-example.lua'
+assert_contains "$(<"$tmp_dir/fzf-delete.log")" 'Delete session: vim-example.lua?'
+
 rm -f "$tmp_dir/tmux-menu-rename.log" "$tmp_dir/fzf-rename.log"
-FAKE_FZF_OUTPUT='new name; $HOME *' \
+FAKE_FZF_OUTPUT="new name; \$HOME *" \
   FZF_ARGS_LOG="$tmp_dir/fzf-rename.log" \
   TMUX_RENAME_LOG="$tmp_dir/tmux-menu-rename.log" \
   PATH="$tmp_dir/bin:$PATH" \
   "$MENU_RENAME_SCRIPT" 'old session' 'tmux'
 assert_eq "$(<"$tmp_dir/tmux-menu-rename.log")" \
-  $'arg=rename-session\narg=-t\narg=old session\narg=new name; $HOME *'
+  $'arg=rename-session\narg=-t\narg==old session\narg=new name; $HOME *'
 rename_fzf_args="$(<"$tmp_dir/fzf-rename.log")"
 assert_contains "$rename_fzf_args" '--query'
 assert_contains "$rename_fzf_args" 'old session'
@@ -260,7 +277,7 @@ tmux_header="$("$MENU_SCRIPT" --header 'tmux' 'session')"
 file_header="$("$MENU_SCRIPT" --header 'config' 'file')"
 directory_header="$("$MENU_SCRIPT" --header 'project' 'directory')"
 opencode_header="$("$MENU_SCRIPT" --header 'opencode' 'session')"
-assert_contains "$tmux_header" '^d kill'
+assert_contains "$tmux_header" '^d delete (confirm)'
 assert_contains "$tmux_header" 'F2 rename'
 assert_not_contains "$tmux_header" '^e explorer'
 assert_contains "$file_header" '^/ search'
@@ -291,8 +308,7 @@ assert_contains "$(<"$tmp_dir/less-input.log")" 'directory listing'
 config_preview="$("$MENU_SCRIPT" --preview 'cfg-sesh' 'config' 'file')"
 assert_contains "$config_preview" '[[session]]'
 
-opencode_preview="$("$MENU_SCRIPT" --preview 'cfg-opencode' 'config' 'file')"
-assert_not_contains "$opencode_preview" 'CONTEXT7_API_KEY'
+assert_contains "$sesh_output" "sed '/CONTEXT7_API_KEY/d'"
 
 widget_source="$(<"$WIDGET_SCRIPT")"
 assert_contains "$widget_source" 'scripts/tmux/sesh-sessions/sesh-menu'

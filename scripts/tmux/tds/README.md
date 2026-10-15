@@ -26,6 +26,18 @@ session with `opencode --session <id>` and records the ID as tmux metadata.
 of changing the current tmux session. These options are used by the recent
 OpenCode view in `sesh-menu`.
 
+New sessions are initialized directly, without launching `tds` a second time
+inside the pane. Panes already in the selected directory do not receive another
+`cd`. Reused panes change directory with `builtin cd -- ... && <command>` so
+aliases cannot alter navigation and a failed change does not start an app in
+the wrong directory.
+
+Without `--new-session`, applying a layout closes the other panes in the current
+tmux window. Use `--directory PATH --new-session` to preserve the current window.
+The OpenCode metadata records the launched session; it does not follow session
+switches made later inside OpenCode. See the
+[picker documentation](../sesh-sessions/README.md) for filtering and diagnostics.
+
 ### Picker keys
 
 | Key      | Action                                             |
@@ -48,7 +60,12 @@ frecent directories are listed first and the selection is recorded.
 
 ## Tests
 
+The integration tests use private tmux sockets and do not touch existing sessions.
+Launch tests use mock applications and zoxide. Temporary files respect `TMPDIR`.
+Run from the repository root:
+
 ```bash
-bash tests/test-tds.sh
-bash tests/test-tds-resume.sh
+bash scripts/tmux/tds/tests/test-tds.sh
+bash scripts/tmux/tds/tests/test-tds-resume.sh
+bash scripts/tmux/tds/tests/test-tds-launch.sh
 ```

@@ -23,4 +23,4 @@ new_name="$(
 new_name="${new_name%%$'\n'*}"
 
 [[ -n "$new_name" && "$new_name" != "$target" ]] || exit 0
-tmux rename-session -t "$target" "$new_name"
+tmux rename-session -t "=$target" "$new_name"

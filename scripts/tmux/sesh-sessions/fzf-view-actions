@@ -10,4 +10,10 @@ elif [[ -n "${FZF_WRAP:-}" ]]; then
   actions+="+toggle-wrap-word"
 fi
 
+if [[ "$mode" == find ]]; then
+  actions+="+disable-search+rebind(change)"
+else
+  actions+="+enable-search+unbind(change)"
+fi
+
 printf '%s\n' "$actions"

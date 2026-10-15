@@ -27,15 +27,16 @@ emit_row() {
 
 emit_sesh_row() {
   local mode="$1"
-  local row="$2"
-  local source_icon="${row%% *}"
-  local value="${row#* }"
+  local sesh_source="$2"
+  local value="$3"
+  local path="${4:-}"
   local source kind icon color
 
-  case "$source_icon" in
-    "") source="tmux"; kind="session"; icon=""; color=34 ;;
-    "") source="project"; kind="directory"; icon=""; color=36 ;;
-    *)
+  case "$sesh_source" in
+    tmux) source="tmux"; kind="session"; icon=""; color=34 ;;
+    zoxide|dir) source="project"; kind="directory"; icon=""; color=36; value="$path" ;;
+    tmuxinator|tmuxp) source="action"; kind="session"; icon=""; color=34 ;;
+    config|config_wildcard)
       if [[ "$value" == cfg-* ]]; then
         source="config"
         case "$value" in
@@ -49,6 +50,7 @@ emit_sesh_row() {
       icon=""
       color=90
       ;;
+    *) return 0 ;;
   esac
 
   case "$mode:$source" in
@@ -69,25 +71,45 @@ emit_sesh_row() {
     esac
   fi
 
-  emit_row "$value" "$source" "$kind" "$icon" "$color"
+  local display="$value"
+  if [[ "$source" == project && ( "$value" == "$HOME" || "$value" == "$HOME/"* ) ]]; then
+    display="~${value#"$HOME"}"
+  fi
+  emit_row "$value" "$source" "$kind" "$icon" "$color" "$display" "$path"
 }
 
 list_rows() {
   local mode="${1:-home}"
+  local freshness="${2:-}"
   local -a command
-  local row path display_path source_icon
-  local project_count=0
-  local project_limit=5
+  local -a words=()
+  local rows path display_path source value recent_rows word status
 
   if [[ "$mode" == find ]]; then
+    read -r -a words <<< "$freshness"
+    command=(fd -H -t d -E .Trash -E .git -E .cache -E node_modules)
+    if ((${#words[@]} > 0)); then
+      command+=(--full-path --fixed-strings --ignore-case -- "${words[0]}" "$HOME")
+    else
+      command+=(-d 2 . "$HOME")
+    fi
+    rows="$("${command[@]}")" || return $?
+    for word in "${words[@]:1}"; do
+      rows="$(grep -Fi -- "$word" <<< "$rows")" || {
+        status=$?
+        [[ "$status" == 1 ]] || return "$status"
+      }
+    done
     while IFS= read -r path; do
+      [[ -n "$path" ]] || continue
       display_path="~${path#"$HOME"}"
       emit_row "$path" "find" "directory" "" 36 "$display_path"
-    done < <(fd -H -d 2 -t d -E .Trash . "$HOME")
+    done <<< "$rows"
     return
   fi
 
   if [[ "$mode" == recent ]]; then
+    recent_rows="$("$SCRIPT_DIR/opencode-recent")" || return $?
     while IFS=$'\t' read -r session_id title path; do
       [[ -n "$session_id" && -n "$path" ]] || continue
       if [[ "$path" == "$HOME" || "$path" == "$HOME/"* ]]; then
@@ -96,45 +118,58 @@ list_rows() {
         display_path="$path"
       fi
       emit_row "$session_id" "opencode" "session" "" 33 "$title  $display_path" "$path"
-    done < <("$SCRIPT_DIR/opencode-recent")
+    done <<< "$recent_rows"
     return
   fi
 
   case "$mode" in
-    home) command=(sesh list -t -c --icons --no-color) ;;
-    all) command=(sesh list --icons --no-color) ;;
-    sessions) command=(sesh list -t --icons --no-color) ;;
-    actions|configs) command=(sesh list -c --icons --no-color) ;;
-    projects) command=(sesh list -z --icons --no-color) ;;
+    home) command=(sesh list -t -c --json) ;;
+    all) command=(sesh list --json) ;;
+    sessions) command=(sesh list -t --json) ;;
+    actions|configs) command=(sesh list -c --json) ;;
+    projects) command=(sesh list -z --json) ;;
     *) printf 'Unknown list mode: %s\n' "$mode" >&2; return 2 ;;
   esac
+  [[ "$freshness" != --fresh ]] || command+=(--no-cache)
 
-  while IFS= read -r row; do
-    [[ -n "$row" ]] || continue
+  rows="$("${command[@]}")" || return $?
+  rows="$(jq -r '
+    if type != "array" then error("Invalid sesh list response") else . end |
+    .[] | [.Src, .Name, (.Path // "")] |
+    if any(.[]; type != "string" or test("[\\t\\r\\n]"))
+    then error("Invalid sesh session fields") else join("\t") end
+  ' <<< "$rows")" || return $?
 
-    source_icon="${row%% *}"
-    if [[ "$source_icon" == "" ]]; then
-      ((project_count += 1))
-      ((project_count <= project_limit)) || continue
-    fi
-
-    emit_sesh_row "$mode" "$row"
-  done < <("${command[@]}")
+  while IFS=$'\t' read -r source value path; do
+    [[ -n "$source" && -n "$value" ]] || continue
+    emit_sesh_row "$mode" "$source" "$value" "$path"
+  done <<< "$rows"
 }
 
 kill_session() {
   local target="${1:-}"
   local source="${2:-}"
+  local confirmation
 
   [[ "$source" == "tmux" && -n "$target" ]] || return 0
-  tmux kill-session -t "$target"
+  confirmation="$(printf 'Cancel\nDelete\n' | fzf \
+    --height=40% --layout=reverse --border \
+    --border-label ' delete tmux session ' \
+    --no-sort --no-multi --prompt 'confirm  ' \
+    --header "Delete session: $target?" \
+    --bind 'enter:accept,esc:abort')" || return 0
+  [[ "$confirmation" == Delete ]] || return 0
+  tmux kill-session -t "=$target"
 }
 
 resolve_directory() {
   local target="$1"
   local source="$2"
+  local path="${3:-}"
 
-  if [[ "$source" == "config" ]]; then
+  [[ -z "$path" ]] || target="$path"
+
+  if [[ "$source" == "config" && -z "$path" ]]; then
     case "$target" in
       cfg-dotfiles) target="$HOME/dotfiles" ;;
       cfg-nvim) target="$HOME/.config/nvim/lua" ;;
@@ -153,11 +188,12 @@ open_directory() {
   local target="${1:-}"
   local source="${2:-}"
   local kind="${3:-}"
+  local path="${4:-}"
   local -a opener
 
   [[ "$kind" == "directory" ]] || return 2
   [[ "$source" == "project" || "$source" == "find" || "$source" == "config" ]] || return 2
-  target="$(resolve_directory "$target" "$source")"
+  target="$(resolve_directory "$target" "$source" "$path")"
 
   [[ -d "$target" ]] || return 3
 
@@ -179,7 +215,7 @@ open_directory() {
 }
 
 open_action() {
-  if open_directory "${1:-}" "${2:-}" "${3:-}"; then
+  if open_directory "${1:-}" "${2:-}" "${3:-}" "${4:-}"; then
     printf 'abort\n'
   fi
 
@@ -198,7 +234,7 @@ preview_item() {
   fi
 
   if [[ "$kind" == "directory" && ( "$source" == "project" || "$source" == "find" ) ]]; then
-    target="$(resolve_directory "$target" "$source")"
+    target="$(resolve_directory "$target" "$source" "$path")"
     eza -alg --color=always --group-directories-first -- "$target"
     return
   fi
@@ -217,7 +253,7 @@ print_header() {
 
   case "$source:$kind" in
     opencode:session) context="enter resume  M-k/j preview  ^/ search" ;;
-    tmux:session) context="enter switch  F2 rename  ^d kill  M-k/j preview  ^/ search" ;;
+    tmux:session) context="enter switch  F2 rename  ^d delete (confirm)  M-k/j preview  ^/ search" ;;
     config:file) context="enter edit  M-k/j preview  ^/ search" ;;
     config:directory) context="enter launch  ^e explorer  M-k/j preview  ^/ search" ;;
     project:directory|find:directory) context="enter open tmux  ^e explorer  M-k/j preview  ^/ search" ;;
@@ -230,7 +266,7 @@ print_header() {
 
 case "${1:-}" in
   --list)
-    list_rows "${2:-home}"
+    list_rows "${2:-home}" "${3:-}"
     exit
     ;;
   --kill)
@@ -238,11 +274,11 @@ case "${1:-}" in
     exit
     ;;
   --open)
-    open_directory "${2:-}" "${3:-}" "${4:-}"
+    open_directory "${2:-}" "${3:-}" "${4:-}" "${5:-}"
     exit
     ;;
   --open-action)
-    open_action "${2:-}" "${3:-}" "${4:-}"
+    open_action "${2:-}" "${3:-}" "${4:-}" "${5:-}"
     exit
     ;;
   --preview)
@@ -261,11 +297,12 @@ esac
 
 fzf_layout=(--layout=default)
 [[ -n "${TMUX:-}" ]] || fzf_layout+=("--margin=20%,12.5%" --border)
+initial_rows="$("$SCRIPT_PATH" --list home)"
 
-selection="$(
-  "$SCRIPT_PATH" --list home | fzf \
+if selection="$(
+  printf '%s' "$initial_rows" | fzf \
     "${fzf_layout[@]}" \
-    --no-sort --ansi \
+    --no-sort --no-multi --ansi \
     --delimiter=$'\t' \
     --with-nth=4 \
     --accept-nth=1,2,3,5 \
@@ -274,6 +311,8 @@ selection="$(
     --header "$("$SCRIPT_PATH" --header none none)" \
     --bind "esc:abort" \
     --bind "tab:down,btab:up" \
+    --bind "start:unbind(change)" \
+    --bind "change:reload(sleep 0.15; $SCRIPT_PATH --list find {q})" \
     --bind "focus:transform-header($SCRIPT_PATH --header {2} {3})" \
     --bind "alt-j:preview-down,alt-k:preview-up" \
     --bind "ctrl-a:transform($SCRIPT_DIR/fzf-view-actions all)+reload($SCRIPT_PATH --list all)" \
@@ -281,15 +320,21 @@ selection="$(
     --bind "ctrl-o:transform($SCRIPT_DIR/fzf-view-actions actions)+reload($SCRIPT_PATH --list actions)" \
     --bind "ctrl-g:transform($SCRIPT_DIR/fzf-view-actions configs)+reload($SCRIPT_PATH --list configs)" \
     --bind "ctrl-x:transform($SCRIPT_DIR/fzf-view-actions projects)+reload($SCRIPT_PATH --list projects)" \
-    --bind "ctrl-f:transform($SCRIPT_DIR/fzf-view-actions find)+reload($SCRIPT_PATH --list find)" \
+    --bind "ctrl-f:transform($SCRIPT_DIR/fzf-view-actions find)+reload($SCRIPT_PATH --list find {q})" \
     --bind "ctrl-r:transform($SCRIPT_DIR/fzf-view-actions recent)+reload($SCRIPT_PATH --list recent)" \
-    --bind "ctrl-e:transform($SCRIPT_PATH --open-action {1} {2} {3})" \
+    --bind "ctrl-e:transform($SCRIPT_PATH --open-action {1} {2} {3} {5})" \
     --bind "ctrl-/:execute($SCRIPT_PATH --view {1} {2} {3} {5})" \
-    --bind "ctrl-d:execute($SCRIPT_PATH --kill {1} {2})+change-prompt(home  )+reload($SCRIPT_PATH --list home)" \
-    --bind "f2:execute($SCRIPT_DIR/rename-session {1} {2})+change-prompt(home  )+reload($SCRIPT_PATH --list home)" \
+    --bind "ctrl-d:execute($SCRIPT_PATH --kill {1} {2})+transform($SCRIPT_DIR/fzf-view-actions home)+reload($SCRIPT_PATH --list home --fresh)" \
+    --bind "f2:execute($SCRIPT_DIR/rename-session {1} {2})+transform($SCRIPT_DIR/fzf-view-actions home)+reload($SCRIPT_PATH --list home --fresh)" \
     --preview-window "right:55%" \
-    --preview "$SCRIPT_PATH --preview {1} {2} {3} {5}"
-)" || exit 0
+    --preview "sleep 0.08; exec $SCRIPT_PATH --preview {1} {2} {3} {5}"
+)"; then
+  :
+else
+  status=$?
+  [[ "$status" == 1 || "$status" == 130 ]] && exit 0
+  exit "$status"
+fi
 [[ -n "$selection" ]] || exit 0
 IFS=$'\t' read -r target source kind path <<< "$selection"
 if [[ "$source" == opencode ]]; then

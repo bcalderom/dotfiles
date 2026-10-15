@@ -17,13 +17,11 @@ fi
 
 TMPDIR_TEST="$(mktemp -d)"
 SESSION="tds-test-$$"
+TMUX_BIN="$(command -v tmux)"
+TEST_SOCKET="tds-layout-test-$$"
 
 cleanup() {
-  tmux kill-session -t "${SESSION}" 2>/dev/null || true
-  tmux kill-session -t oc-root 2>/dev/null || true
-  tmux kill-session -t oc-root-2 2>/dev/null || true
-  tmux kill-session -t oc-deep_target 2>/dev/null || true
-  tmux kill-session -t oc-shallow 2>/dev/null || true
+  "$TMUX_BIN" -L "$TEST_SOCKET" kill-server 2>/dev/null || true
   rm -rf "${TMPDIR_TEST}"
 }
 trap cleanup EXIT
@@ -33,6 +31,14 @@ mkdir -p "${ROOT_DIR}/a/b/c/deep_target" "${ROOT_DIR}/shallow"
 
 MOCK_BIN="${TMPDIR_TEST}/bin"
 mkdir -p "${MOCK_BIN}"
+
+export TDS_TEST_TMUX_BIN="$TMUX_BIN" TDS_TEST_SOCKET="$TEST_SOCKET"
+cat >"${MOCK_BIN}/tmux" <<'EOF'
+#!/usr/bin/env bash
+exec "$TDS_TEST_TMUX_BIN" -L "$TDS_TEST_SOCKET" -f /dev/null "$@"
+EOF
+chmod +x "${MOCK_BIN}/tmux"
+export PATH="${MOCK_BIN}:$PATH" SHELL=/bin/bash
 
 cat > "${MOCK_BIN}/fzf" <<'EOF'
 #!/usr/bin/env bash

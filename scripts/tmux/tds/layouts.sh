@@ -34,6 +34,19 @@ opencode_command() {
   printf '%s' "$command"
 }
 
+run_in_directory() {
+  local pane="$1"
+  local command="${2:-}"
+  local current_directory
+
+  current_directory="$(tmux display-message -p -t "$pane" '#{pane_current_path}')"
+  if [[ "$current_directory" != "$DIR" && ! "$current_directory" -ef "$DIR" ]]; then
+    command="builtin cd -- $(escape_shell "$DIR")${command:+ && $command}"
+  fi
+
+  [[ -z "$command" ]] || tmux send-keys -t "$pane" "$command" C-m
+}
+
 split_pane() {
   local target="$1"
   local orientation="$2"
@@ -87,7 +100,6 @@ layout_3_panes_ide() {
   local right_pane
   local bottom_right_pane
   local top_right_pane
-  local dir_escaped
 
   if [[ "${WINDOW_PANES}" -gt 1 ]]; then
     tmux kill-pane -a -t "${left_pane}"
@@ -96,30 +108,21 @@ layout_3_panes_ide() {
   right_pane="$(split_pane "${left_pane}" -h "${RIGHT_PERCENT}")"
   bottom_right_pane="$(split_pane "${right_pane}" -v "${RIGHT_BOTTOM_PERCENT}")"
   top_right_pane="${right_pane}"
-  dir_escaped="$(escape_shell "${DIR}")"
-
-  tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${left_pane}" "$(opencode_command)" C-m
-
-  tmux send-keys -t "${top_right_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${top_right_pane}" "nvim -c \"Telescope find_files\"" C-m
-
-  tmux send-keys -t "${bottom_right_pane}" "cd -- ${dir_escaped}" C-m
+  run_in_directory "$left_pane" "$(opencode_command)"
+  run_in_directory "$top_right_pane" 'nvim -c "Telescope find_files"'
+  run_in_directory "$bottom_right_pane"
 
   tmux select-pane -t "${left_pane}"
 }
 
 layout_oc() {
   local left_pane="${CURRENT_PANE_ID}"
-  local dir_escaped
 
   if [[ "${WINDOW_PANES}" -gt 1 ]]; then
     tmux kill-pane -a -t "${left_pane}"
   fi
 
-  dir_escaped="$(escape_shell "${DIR}")"
-  tmux send-keys -t "${left_pane}" "cd -- ${dir_escaped}" C-m
-  tmux send-keys -t "${left_pane}" "$(opencode_command)" C-m
+  run_in_directory "$left_pane" "$(opencode_command)"
   tmux select-pane -t "${left_pane}"
 }
 

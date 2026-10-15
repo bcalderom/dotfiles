@@ -31,6 +31,15 @@ Each command lives in its own directory under `scripts/`, with its own
 relative symlinks so commands stay portable when the repo is stowed on another
 machine.
 
+## Terminal sessions
+
+`Alt-S` opens the shared sesh picker from the shell or a tmux popup. It supports
+project search, confirmed session deletion and resuming recent OpenCode v2
+sessions with `Ctrl-R`, without redundant directory changes.
+
+- [sesh picker: shortcuts, search, compatibility and diagnostics](scripts/tmux/sesh-sessions/README.md)
+- [tds: development layouts, session creation and tests](scripts/tmux/tds/README.md)
+
 ## OBS setup script
 
 Use the OBS helper script in `scripts/obs/setup-obs/setup-obs.sh` to verify/install the

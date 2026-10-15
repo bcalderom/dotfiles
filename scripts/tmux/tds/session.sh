@@ -9,7 +9,7 @@ next_session_name() {
   candidate="$base"
   n=2
 
-  while tmux has-session -t "$candidate" 2>/dev/null; do
+  while tmux has-session -t "=$candidate" 2>/dev/null; do
     candidate="$base-$((n++))"
   done
 
@@ -39,21 +39,25 @@ rename_for_directory() {
 }
 
 create_new_session() {
-  local target command
+  local target
 
   target="$(next_session_name "$DIR")"
-  command="PATH=$(escape_shell "$PATH") $(escape_shell "$SELF") --directory $(escape_shell "$DIR") --layout $(escape_shell "$LAYOUT")"
+  CURRENT_PANE_ID="$(tmux new-session -d -s "$target" -n opencode -c "$DIR" \
+    -e "PATH=$PATH" -P -F '#{pane_id}')"
+  WINDOW_PANES=1
 
   if [[ -n "$OPENCODE_SESSION" ]]; then
-    command+=" --opencode-session $(escape_shell "$OPENCODE_SESSION")"
+    tmux set-option -t "$CURRENT_PANE_ID" @opencode_session_id "$OPENCODE_SESSION"
   fi
 
-  tmux new-session -d -s "$target" -n opencode -c "$DIR"
-  tmux send-keys -t "$target:opencode" "$command" C-m
+  if have zoxide; then
+    zoxide add "$DIR" 2>/dev/null || true
+  fi
+  apply_layout
 
   if [[ -n "${TMUX:-}" ]]; then
-    tmux switch-client -t "$target" 2>/dev/null || true
+    tmux switch-client -t "=$target"
   else
-    exec tmux attach-session -t "$target"
+    exec tmux attach-session -t "=$target"
   fi
 }

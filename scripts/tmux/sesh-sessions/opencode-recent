@@ -3,10 +3,8 @@ set -euo pipefail
 
 OPENCODE_BIN="${OPENCODE_BIN:-/usr/bin/opencode}"
 open_session_ids=""
-session_query='select id, title, directory
-from session
-where parent_id is null and time_archived is null
-order by time_updated desc'
+recent_sessions='[]'
+cursor=""
 
 if command -v tmux >/dev/null 2>&1; then
   open_session_ids="$(
@@ -19,17 +17,35 @@ if command -v tmux >/dev/null 2>&1; then
   )"
 fi
 
-"$OPENCODE_BIN" --pure db "$session_query" --format json \
-  | jq -r --arg open_session_ids "$open_session_ids" '
+while :; do
+  command=("$OPENCODE_BIN" api session.list --param parentID=null --param order=desc --param limit=100)
+  [[ -z "$cursor" ]] || command+=(--param "cursor=$cursor")
+  response="$("${command[@]}")"
+  recent_sessions="$(jq -c \
+    --arg open_session_ids "$open_session_ids" \
+    --argjson recent "$recent_sessions" '
+      if (.data | type) != "array" then error("Invalid OpenCode session response") else . end |
       ($open_session_ids | split("\n") | map(select(length > 0))) as $open |
-      [
-        .[] |
+      ($recent + [
+        .data[] |
+        select(.parentID == null and .time.archived == null) |
         select(.id as $id | ($open | index($id) | not)) |
-        [
-          .id,
-          (.title | gsub("[\\t\\r\\n]"; " ")),
-          (.directory | gsub("[\\t\\r\\n]"; " "))
-        ]
-      ][:10][] |
-      @tsv
-    '
+        select((.location.directory | type) == "string" and .location.directory != "")
+      ])[:10]
+    ' <<< "$response")"
+
+  [[ "$(jq 'length' <<< "$recent_sessions")" -lt 10 ]] || break
+  next_cursor="$(jq -r '.cursor.next // empty' <<< "$response")"
+  [[ -n "$next_cursor" ]] || break
+  if [[ "$next_cursor" == "$cursor" ]]; then
+    printf 'OpenCode returned a repeated session cursor\n' >&2
+    exit 1
+  fi
+  cursor="$next_cursor"
+done
+
+jq -r '.[] | [
+  .id,
+  ((.title // .id) | gsub("[\\t\\r\\n]"; " ")),
+  (.location.directory | gsub("[\\t\\r\\n]"; " "))
+] | @tsv' <<< "$recent_sessions"
