@@ -19,6 +19,7 @@ command_dirs=(
   printing/psvc
   shell/path
   ssh/ssf
+  system/install-arch
   tmux/sesh-sessions
   tmux/tds
   web/buda-send

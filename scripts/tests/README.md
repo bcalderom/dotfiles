@@ -11,7 +11,15 @@ Command-specific tests live beside their command under each command's `tests/` d
 ```bash
 bash test-script-structure.sh
 bash test-quick-menu.sh
+bash test-setup.sh
 ```
+
+`test-setup.sh` checks the root Arch bootstrapper with mocked pacman, AUR helpers,
+hardware detection, systemd and Stow, using a temporary HOME. It covers read-only
+modes, hardware profiles, opt-in groups, repeatable installs and failure handling
+without installing packages, accessing the network or changing host services.
+When Stow is installed and the test runs as a normal user, it also checks real
+symlink creation and conflicts inside a generated checkout and temporary HOME.
 
 `test-quick-menu.sh` checks the Hyprland quick menu's Docker stop action with
 simulated Docker, systemd, Polkit, rofi, and notification commands. It does not
