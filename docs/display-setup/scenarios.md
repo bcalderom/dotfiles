@@ -40,7 +40,10 @@ Trigger: lid open with no external output.
 
 All managed workspace rules use `persistent:false`. Empty inactive workspaces disappear; Hyprland still keeps one active workspace on each enabled monitor even when it is empty.
 
-Closing the lid without an external monitor does not create a display transition; normal suspend or lock policy remains responsible.
+Closing the lid without an external monitor does not create a display transition.
+Sleep/lock policy is separate. With `setup.sh --configure-lid`, logind ignores lid
+closure on battery, AC and dock, matching the reference host. The machine remains
+reachable remotely; do not store it running in a bag. Locking remains independent.
 
 ## HDMI Mirror
 

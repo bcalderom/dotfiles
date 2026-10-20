@@ -87,6 +87,11 @@ actual del host antiguo está en `lenovo`, no en la rama predeterminada `main`;
 revisar igualmente los ajustes específicos del hardware. Si estos cambios
 todavía no están publicados, transferir explícitamente `setup.sh`,
 `docs/migration.md`, `scripts/tests/test-setup.sh` y `README.md` al checkout nuevo.
+Las opciones nuevas también necesitan sus helpers públicos bajo
+`scripts/keyboard/kanata-deploy/`, `scripts/desktop/hypr-lid-deploy/` y
+`scripts/system/migrate-app-configs/`, junto con las unidades/configuraciones
+versionadas que esos helpers usan. Seleccionar archivos públicos explícitos y
+comprobar sus checksums; no asumir que copiar solo `setup.sh` es suficiente.
 No transferir a ciegas todo el directorio local de dotfiles: contiene archivos
 ignorados y estado local que Git no transporta.
 
@@ -125,8 +130,8 @@ La ausencia de un programa en el historial no demuestra que no se utilice.
 | Grupo | Contenido / motivo |
 | --- | --- |
 | `base` | SSH/rsync, Neovim, Zsh, Git, tmux, fzf, fd, eza y herramientas de scripts |
-| `dev` | OpenCode/tds/sesh, AWS CLI, GitHub CLI, LazyGit, Node, Python/pyenv/uv y compilación |
-| `hypr`, `ui` | Escritorio existente, Brave, Dolphin, captura, bloqueo, notificaciones y tapa |
+| `dev` | OpenCode/tds/sesh, HeidiSQL Qt6, AWS CLI, GitHub CLI, LazyGit, Node, Python/pyenv/uv y compilación |
+| `hypr`, `ui` | Escritorio existente, Brave, Chromium, Dolphin, captura, bloqueo, notificaciones y tapa |
 | `audio`, `network`, `bluetooth`, `fonts` | Dependencias de un escritorio funcional |
 | `keyboard`, `vpn` | Kanata, NordVPN y NetBird; configuración/autenticación aparte |
 | `amd`, `intel`, `amd-gpu`, `intel-gpu` | Microcódigo y gráficos independientes, según detección |
@@ -194,6 +199,42 @@ hora, Bluetooth y energía cuyos grupos estén seleccionados. **No las inicia**,
 habilita SSH, Docker, CUPS o VPN. Revisar conflictos de gestores de red existentes.
 La configuración DNS/resolved y sus enlaces se revisa aparte; no se modifica.
 
+Para reproducir también el teclado y la política de tapa del host de referencia:
+
+```bash
+bash setup.sh --dry-run --aur yay --stow --deploy-kanata --configure-lid
+bash setup.sh --aur yay --stow --deploy-kanata --configure-lid
+bash setup.sh --check --deploy-kanata --configure-lid
+```
+
+Estas opciones son independientes de `--enable-services` y sí autorizan la
+activación/reinicio de sus servicios concretos. `--deploy-kanata` requiere el grupo
+`keyboard`, valida el archivo con `kanata --check`, instala `/etc/kanata/kanata.kbd`,
+la unidad de sistema y la carga persistente de `uinput`, y habilita/reinicia Kanata.
+No añade el usuario a `input`. Si Kanata sigue pendiente de AUR, no intenta activar
+el servicio y mantiene el resultado incompleto. No sobrescribe una configuración
+de Kanata diferente; revisarla/respaldarla antes de un `--update` manual.
+
+`--configure-lid` requiere `hypr` y las dependencias de escritorio (`jq`,
+`brightnessctl`, `hyprctl`). Detecta el único sensor de tapa y prefiere la única
+retroiluminación de tipo `raw`. Sirve tanto para `LID0`/`intel_backlight` como para
+`LID`/`amdgpu_bl1`, sin copiar identificadores entre equipos. Si la detección es
+ambigua, se detiene antes de instalar paquetes; se pueden declarar explícitamente
+`LID_STATE_PATH` y `HYPR_LID_BACKLIGHT_DEVICE`.
+
+Instala `/etc/systemd/logind.conf.d/60-dotfiles-lid.conf` con las tres acciones de
+tapa en `ignore` y un override local
+`~/.config/systemd/user/hypr-lid.service.d/20-local-hardware.conf`. Recarga logind
+sin reiniciarlo y despliega/habilita/reinicia solo el coordinador de pantallas.
+El portátil permanece activo con la tapa cerrada **también con batería**: vigilar
+consumo y ventilación; no guardarlo encendido en una bolsa. Los archivos locales
+diferentes se revisan antes de sustituirlos; no se eliminan overrides anteriores.
+
+`--check` comprueba archivos, habilitación/actividad y política runtime de logind,
+sin sudo ni cambios. La prueba física del teclado/tapa y las pantallas sigue
+siendo necesaria. `--dry-run` solo muestra el plan. No combinar estas opciones con
+`--configs-only`; no se copian claves, secretos ni perfiles privados por activarlas.
+
 `--stow` hace una simulación real antes de enlazar y se detiene ante conflictos.
 No usa `--adopt` ni sobrescribe archivos. Excluye documentación y el propio setup
 de los enlaces a HOME. También excluye directorios systemd `.wants` y `.requires`:
@@ -201,9 +242,57 @@ son estado de habilitación local, que se debe recrear mediante systemctl despu�
 de revisar los servicios, no enlazar desde el repositorio. Comparar o respaldar
 manualmente cualquier archivo en conflicto, incluido el `.zshrc` creado por otro
 instalador, antes de repetir.
+También excluye `hypr-lid.service.d/`, porque contiene ajustes específicos de cada
+máquina y no debe trasladar rutas de hardware de Intel a AMD ni viceversa.
 
 El `.zshrc` actual intenta iniciar Hyprland al entrar por tty1: no cambiar el shell
 a Zsh hasta completar los paquetes, revisar la configuración y preparar los plugins.
+
+### Copia optativa de configuraciones de aplicaciones
+
+Instalar paquetes no restaura sus preferencias, perfiles ni conexiones guardadas.
+El setup incorpora un helper para OnlyOffice, MarkText, HeidiSQL nativo, Chromium,
+Brave, Microsoft Teams for Linux, Thunderbird, Spotify y OpenCode v2. Seleccionar
+explícitamente las aplicaciones y ejecutar **en el host nuevo**:
+
+```bash
+bash setup.sh --configs-only --copy-app-configs-from boris@HOST_ANTIGUO \
+  --config-apps onlyoffice,marktext,heidisql,chromium,brave,teams-for-linux,thunderbird,spotify,opencode \
+  --dry-run
+```
+
+Para un respaldo local, sustituir `boris@HOST_ANTIGUO` por la ruta del HOME
+respaldado. Para SSH, comprobar la huella y preparar autenticación antes; se puede
+añadir `--config-ssh-control-path /ruta/al/socket-existente`. Ambos hosts necesitan
+Python 3 y rsync. No se desactiva la comprobación de claves ni se guardan contraseñas.
+
+Cerrar las aplicaciones seleccionadas en ambos hosts y revisar la simulación.
+Para ejecutar, reemplazar `--dry-run` por `--include-private-configs` y confirmar
+la frase que solicita la terminal. La copia puede contener credenciales y sesiones:
+es una autorización separada, nunca una acción predeterminada del setup.
+
+`--configs-only` no consulta pacman ni instala paquetes, enlaza dotfiles o habilita
+servicios. También se pueden añadir las opciones de copia al setup normal; su
+preflight se ejecuta antes de los cambios y la copia después de instalar paquetes.
+`--check` con esas opciones solo revisa las precondiciones, no acredita una copia previa.
+
+Los datos se preparan en un lote privado bajo
+`~/.local/state/dotfiles-app-configs/`, se verifican con checksums y luego se
+colocan en sus rutas originales de HOME. Los ajustes anteriores quedan respaldados
+en el mismo lote; no se mezclan ni se borran sin respaldo. Se omiten cachés y locks.
+No se cierran aplicaciones automáticamente, no se copian llaveros y el HOME del
+destino debe ser privado (`700`). Los navegadores pueden requerir el llavero
+original o reautenticación para recuperar contraseñas y sesiones.
+
+Thunderbird incluye correo local y credenciales dentro del perfil, pero no
+almacenes externos. Teams y Spotify pueden requerir reautenticación. OpenCode v2
+copia solo ajustes y definiciones globales, no bases de sesiones, credenciales de
+proveedores ni registro del servicio. Cerrar sus clientes y detener manualmente
+su servicio antes de copiar, nunca desde una sesión activa de OpenCode. Los enlaces
+de Stow se rechazan: restaurarlos mediante Stow, sin forzar su reemplazo.
+
+Consultar [rutas, límites, restauración y pruebas](../scripts/system/migrate-app-configs/README.md).
+No subir configuraciones privadas o perfiles al repositorio.
 
 ## 4. Transferencia de datos por red
 
@@ -302,8 +391,11 @@ borrar el host antiguo hasta comprobar los datos y las herramientas de trabajo.
 bash -n setup.sh scripts/tests/test-setup.sh
 shellcheck setup.sh scripts/tests/test-setup.sh
 bash scripts/tests/test-setup.sh
+bash scripts/keyboard/kanata-deploy/tests/test-kanata-deploy.sh
+bash scripts/desktop/hypr-lid-deploy/tests/test-configure-host.sh
 bash scripts/tests/test-script-structure.sh
 python3 -B scripts/system/install-arch/tests/test_install_arch.py
+python3 -B scripts/system/migrate-app-configs/tests/test_migrate_app_configs.py
 ```
 
 Las pruebas de instalación usan comandos simulados y un HOME temporal: no instalan

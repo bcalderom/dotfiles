@@ -20,6 +20,30 @@ modes, hardware profiles, opt-in groups, repeatable installs and failure handlin
 without installing packages, accessing the network or changing host services.
 When Stow is installed and the test runs as a normal user, it also checks real
 symlink creation and conflicts inside a generated checkout and temporary HOME.
+It also covers opt-in config migration, its private-data consent and previews,
+and config-only runs that must not install packages or enable services.
+Hardware flags are tested with mocked deployers: previews/checks stay read-only,
+missing AUR packages cannot activate Kanata, and lid preflight failures prevent
+package installation. Real Stow fixtures also exclude host-specific lid drop-ins.
+
+Hardware deployers have isolated tests (from the repository root):
+
+```bash
+bash scripts/keyboard/kanata-deploy/tests/test-kanata-deploy.sh
+bash scripts/desktop/hypr-lid-deploy/tests/test-configure-host.sh
+```
+
+They use temporary HOME/system/hardware roots and mocked systemd; they never
+capture a keyboard, write `/etc`, suspend a machine or restart real services.
+
+The config migration helper has its own synthetic-fixture tests:
+
+```bash
+python3 -B scripts/system/migrate-app-configs/tests/test_migrate_app_configs.py
+```
+
+Run that command from the repository root. No real profiles or SSH connections
+are used; real rsync integration is limited to a generated temporary HOME.
 
 `test-quick-menu.sh` checks the Hyprland quick menu's Docker stop action with
 simulated Docker, systemd, Polkit, rofi, and notification commands. It does not

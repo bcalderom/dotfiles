@@ -400,7 +400,8 @@ falta y mantiene las confirmaciones de pacman y del gestor AUR.
 
 Los grupos predeterminados cubren shell, desarrollo, Hyprland, UI, audio, red,
 Bluetooth, fuentes, Kanata y VPN; incluyen, entre otros, Neovim, tmux, sesh,
-OpenCode, AWS CLI, Brave y Dolphin. CPU y GPU se detectan de forma independiente.
+OpenCode, HeidiSQL Qt6, AWS CLI, Brave, Chromium y Dolphin. CPU y GPU se detectan
+de forma independiente.
 No se debe instalar el perfil Intel en el Ryzen.
 
 Para instalar **también todos los grupos de aplicaciones opcionales actuales**:
@@ -494,8 +495,8 @@ y de los scripts en el repositorio.
 
 ```bash
 cd "$HOME/dotfiles"
-bash setup.sh --dry-run --with "$EXTRAS" --aur yay --enable-services --stow
-bash setup.sh --with "$EXTRAS" --aur yay --enable-services --stow
+bash setup.sh --dry-run --with "$EXTRAS" --aur yay --enable-services --stow --deploy-kanata --configure-lid
+bash setup.sh --with "$EXTRAS" --aur yay --enable-services --stow --deploy-kanata --configure-lid
 ```
 
 - `--stow` realiza una simulación real antes de enlazar; si hay conflictos, se
@@ -503,9 +504,13 @@ bash setup.sh --with "$EXTRAS" --aur yay --enable-services --stow
   antes de repetir; no usar `--adopt` para absorberlos sin revisión.
 - `--enable-services` habilita red/hora, Bluetooth y energía según los grupos,
   **pero no inicia servicios**. No habilita SSH, Docker, CUPS ni las VPN.
-- Kanata y el servicio de tapa requieren revisar y ejecutar sus despliegues
-  específicos. Esos scripts sí escriben configuración y arrancan/reinician sus
-  servicios; hacerlo conscientemente después de revisar el hardware nuevo.
+- `--deploy-kanata` valida/despliega el remapeo y habilita/reinicia Kanata, con
+  `uinput` persistente, sin añadir `boris` a `input`.
+- `--configure-lid` detecta sensor/retroiluminación, recarga logind y despliega/
+  habilita/reinicia el coordinador de pantallas, no Hyprland ni logind. Mantiene
+  el equipo activo al cerrar la tapa en batería, corriente y dock. **No guardar
+  el portátil encendido en una bolsa**. Omitir la opción si no se desea esa política.
+  La detección ambigua o archivos locales diferentes requieren revisión.
 - Los plugins de Zsh, Neovim y tmux necesitan su preparación/red. TPM figura como
   gitlink sin garantizar contenido tras el clon: no suponer que `git submodule
   update` lo resolverá. Seguir las instrucciones del repositorio y fuentes oficiales.
@@ -527,12 +532,32 @@ un gestor gráfico de login adicional sin necesidad: este entorno arranca desde 
 
 ## 13. Comprobación final y migración de datos
 
+La copia de configuraciones de aplicaciones es una acción aparte, no una
+consecuencia de instalar sus paquetes. Para revisar las de OnlyOffice, MarkText,
+HeidiSQL, Chromium, Brave, Microsoft Teams for Linux, Thunderbird, Spotify y
+OpenCode v2 desde el equipo nuevo:
+
+```bash
+bash setup.sh --configs-only --copy-app-configs-from boris@HOST_ANTIGUO \
+  --config-apps onlyoffice,marktext,heidisql,chromium,brave,teams-for-linux,thunderbird,spotify,opencode \
+  --dry-run
+```
+
+Cerrar las aplicaciones seleccionadas en ambos hosts y preparar SSH verificado.
+Solo después de revisar la simulación, sustituir `--dry-run` por
+`--include-private-configs` y confirmar en la terminal. Se respaldan los ajustes
+existentes y se verifica la copia antes de reemplazarlos. Consultar los
+[límites de perfiles, credenciales y llaveros](../scripts/system/migrate-app-configs/README.md).
+Thunderbird incluye correo local; OpenCode solo ajustes y definiciones globales,
+no sesiones ni credenciales externas. Cerrar también el servicio de OpenCode
+manualmente antes de copiar; no hacerlo desde una sesión activa de OpenCode.
+
 Con la **misma selección de grupos** utilizada al instalar:
 
 ```bash
 cd "$HOME/dotfiles"
 EXTRAS=docker,printing,obs,office,comms,media,optional
-bash setup.sh --check --with "$EXTRAS" --enable-services --stow
+bash setup.sh --check --with "$EXTRAS" --enable-services --stow --deploy-kanata --configure-lid
 sudo bootctl --esp-path=/boot status
 systemctl --failed
 systemctl --user --failed

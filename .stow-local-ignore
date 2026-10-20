@@ -22,3 +22,5 @@ _darcs
 ^/LICENSE.*
 ^/COPYING
 
+# Per-host lid sensor/backlight overrides must not migrate between machines.
+(^|/)hypr-lid\.service\.d(/|$)

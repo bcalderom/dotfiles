@@ -20,6 +20,7 @@ command_dirs=(
   shell/path
   ssh/ssf
   system/install-arch
+  system/migrate-app-configs
   tmux/sesh-sessions
   tmux/tds
   web/buda-send

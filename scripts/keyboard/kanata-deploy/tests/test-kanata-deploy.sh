@@ -50,6 +50,13 @@ printf '\n' >> "${MODPROBE_LOG}"
 exit 0
 EOF
 chmod +x "${MOCK_BIN}/modprobe"
+cat > "${MOCK_BIN}/kanata" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == --check && "$2" == --cfg && -f "$3" ]]
+[[ "${MOCK_INVALID_KANATA:-0}" == 0 ]]
+EOF
+chmod +x "${MOCK_BIN}/kanata"
 
 export PATH="${MOCK_BIN}:${PATH}"
 
@@ -102,6 +109,35 @@ bash "${DEPLOY_SCRIPT}" --update
 
 grep -q -- "daemon-reload" "${SYSTEMCTL_LOG}"
 grep -q -- "restart kanata.service" "${SYSTEMCTL_LOG}"
+
+echo '==> activate validates, enables and restarts exactly once'
+: > "${SYSTEMCTL_LOG}"
+bash "${DEPLOY_SCRIPT}" --activate
+grep -q -- 'enable kanata.service' "${SYSTEMCTL_LOG}"
+[[ $(grep -c 'restart kanata.service' "${SYSTEMCTL_LOG}") -eq 1 ]]
+if grep -q -- '--now' "${SYSTEMCTL_LOG}"; then exit 1; fi
+echo '==> check is read-only and configuration mismatches are incomplete'
+: > "${SYSTEMCTL_LOG}"
+: > "${MODPROBE_LOG}"
+bash "${DEPLOY_SCRIPT}" --check
+bash "${DEPLOY_SCRIPT}" --check --activate
+if grep -Eq -- 'daemon-reload|enable |restart ' "${SYSTEMCTL_LOG}"; then exit 1; fi
+[[ ! -s "${MODPROBE_LOG}" ]]
+printf 'different profile\n' > "${DEST_ROOT}/etc/kanata/kanata.kbd"
+status=0
+bash "${DEPLOY_SCRIPT}" --check >/dev/null || status=$?
+[[ $status -eq 1 ]]
+echo '==> activation does not overwrite a different user profile'
+: > "${SYSTEMCTL_LOG}"
+status=0
+bash "${DEPLOY_SCRIPT}" --activate >/dev/null 2>&1 || status=$?
+[[ $status -eq 2 && ! -s "${SYSTEMCTL_LOG}" ]]
+[[ $(cat "${DEST_ROOT}/etc/kanata/kanata.kbd") == 'different profile' ]]
+echo '==> invalid source config prevents deployment commands'
+: > "${SYSTEMCTL_LOG}"
+status=0
+MOCK_INVALID_KANATA=1 bash "${DEPLOY_SCRIPT}" --activate || status=$?
+[[ $status -ne 0 && ! -s "${SYSTEMCTL_LOG}" ]]
 
 : > "${SYSTEMCTL_LOG}"
 
