@@ -87,7 +87,11 @@ cat > "$WORK/bin/python3" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "python3 $*" >> "$MOCK_LOG"
-[[ "${MOCK_FAIL_CONFIG:-0}" == 0 ]] || exit 7
+case "${1:-}" in
+  */scripts/desktop/configure-desktop/configure_desktop.py)
+    [[ "${MOCK_FAIL_DESKTOP:-0}" == 0 ]] || exit 8 ;;
+  *) [[ "${MOCK_FAIL_CONFIG:-0}" == 0 ]] || exit 7 ;;
+esac
 EOF
 cat > "$WORK/bin/bash" <<'EOF'
 #!/bin/bash
@@ -107,7 +111,7 @@ export PATH="$WORK/bin:$PATH"
 reset_case() {
   : > "$MOCK_LOG"
   : > "$MOCK_INSTALLED_FILE"
-  unset MOCK_CPU MOCK_GPU MOCK_PROMOTED MOCK_FAIL_INSTALL MOCK_FAIL_AUR MOCK_SERVICE_DISABLED MOCK_STOW_CONFLICT MOCK_FAIL_CONFIG MOCK_FAIL_HARDWARE
+  unset MOCK_CPU MOCK_GPU MOCK_PROMOTED MOCK_FAIL_INSTALL MOCK_FAIL_AUR MOCK_SERVICE_DISABLED MOCK_STOW_CONFLICT MOCK_FAIL_CONFIG MOCK_FAIL_HARDWARE MOCK_FAIL_DESKTOP
 }
 
 run_status() {
@@ -127,7 +131,7 @@ not_line() { ! grep -Fxq -- "$1" "$WORK/output"; }
 logged() { grep -Fq -- "$1" "$MOCK_LOG"; }
 not_logged() { ! grep -Fq -- "$1" "$MOCK_LOG"; }
 read_only() {
-  if grep -Eq '^(sudo |pacman -S(yu| )|yay -S|paru -S|systemctl enable|stow --verbose)|^bash .* --(activate|apply)$' "$MOCK_LOG"; then
+  if grep -Eq '^(sudo |pacman -S(yu| )|yay -S|paru -S|systemctl enable|stow --verbose)|^(bash|python3) .* --(activate|apply)$' "$MOCK_LOG"; then
     cat "$MOCK_LOG" >&2
     echo 'Unexpected mutation in read-only mode' >&2
     exit 1
@@ -156,6 +160,8 @@ run_status 2 --include-private-configs
 run_status 2 --copy-app-configs-from /snapshot
 run_status 2 --only base --deploy-kanata --dry-run
 run_status 2 --only base --configure-lid --dry-run
+run_status 2 --only base --configure-desktop --dry-run
+run_status 2 --configs-only --copy-app-configs-from /snapshot --config-apps chromium --configure-desktop --dry-run
 run_status 2 --configs-only --copy-app-configs-from /snapshot --config-apps chromium --deploy-kanata --dry-run
 run_status 2 --configs-only --copy-app-configs-from /snapshot --config-apps chromium --configure-lid --dry-run
 [[ ! -s "$MOCK_LOG" ]]
@@ -169,6 +175,12 @@ contains 'aws-cli-v2'
 contains 'opencode'
 contains 'rsync'
 contains 'chromium'
+contains 'nautilus'
+contains 'gvfs'
+contains 'gsimplecal'
+contains 'xdg-user-dirs'
+contains 'xdg-desktop-portal-gtk'
+not_contains ' dolphin'
 contains 'openbsd-netcat'
 contains 'sesh-bin heidisql-qt6 brave-bin kanata nordvpn-bin netbird'
 not_contains ' hwloc'
@@ -380,6 +392,31 @@ if [[ $EUID -ne 0 ]]; then
   export MOCK_FAIL_AUR=1
   run_status 6 --only keyboard --no-update --aur yay --deploy-kanata
   not_logged 'kanata-deploy.sh --activate'
+fi
+
+echo '==> desktop configuration is explicit; previews/checks never apply settings'
+reset_case
+echo '*' > "$MOCK_INSTALLED_FILE"
+run_status 0 --only ui --no-update
+not_logged 'configure_desktop.py'
+run_status 0 --only ui --configure-desktop --dry-run
+contains 'configure_desktop.py --apply'
+not_logged 'configure_desktop.py --apply'
+read_only
+run_status 0 --only ui --configure-desktop --check
+logged 'configure_desktop.py --check'
+read_only
+export MOCK_FAIL_DESKTOP=1
+run_status 1 --only ui --configure-desktop --check
+read_only
+unset MOCK_FAIL_DESKTOP
+if [[ $EUID -ne 0 ]]; then
+  run_status 0 --only ui --no-update --configure-desktop
+  logged 'configure_desktop.py --apply'
+  export MOCK_FAIL_DESKTOP=1
+  run_status 8 --only ui --no-update --configure-desktop
+else
+  run_status 2 --only ui --no-update --configure-desktop
 fi
 
 echo '==> stow conflict prevents linking'

@@ -12,7 +12,26 @@ Command-specific tests live beside their command under each command's `tests/` d
 bash test-script-structure.sh
 bash test-quick-menu.sh
 bash test-setup.sh
+python3 -B test-desktop-config.py
 ```
+
+`test-desktop-config.py` checks the Waybar/SwayNC wiring, locally supported widget
+fields, directory associations and calendar placement. Application commands run
+against temporary mocks, including missing-package fallbacks; no real desktop
+apps are opened. From the repository root, use
+`python3 -B scripts/tests/test-desktop-config.py`.
+
+The opt-in desktop settings helper has isolated tests for read-only modes,
+repeatable apply/check, custom directories and bookmarks, disabled folders,
+Stow symlinks, locale validation and failure handling:
+
+```bash
+python3 -B scripts/desktop/configure-desktop/tests/test_configure_desktop.py
+```
+
+It uses mocked GSettings/localedef commands and a temporary HOME, never the real
+desktop. `test-setup.sh` also verifies the `--configure-desktop` flag is opt-in,
+requires `ui`, propagates failures, and never applies settings in preview/check.
 
 `test-setup.sh` checks the root Arch bootstrapper with mocked pacman, AUR helpers,
 hardware detection, systemd and Stow, using a temporary HOME. It covers read-only

@@ -34,6 +34,24 @@ Each command lives in its own directory under `scripts/`, with its own
 relative symlinks so commands stay portable when the repo is stowed on another
 machine.
 
+## Desktop controls
+
+Waybar groups quick controls in one pill, keeps system resources in a click-to-open
+drawer, and opens a calendar when the clock is clicked. GNOME Files is the preferred
+file manager, with Dolphin retained as a fallback on existing installations.
+See [desktop controls, packages and validation](docs/desktop-controls.md).
+
+To reproduce Files dark mode/bookmarks and the Monday-first calendar locale on
+another host, explicitly select desktop configuration as the normal user:
+
+```bash
+bash setup.sh --only ui --aur yay --stow --configure-desktop
+bash setup.sh --only ui --check --stow --configure-desktop
+```
+
+The helper preserves existing personal-folder paths and bookmarks. It never
+restarts the desktop or mounts disks; preview first with `--dry-run`.
+
 ## Arch bootstrap and migration
 
 For the new machine currently running Ubuntu, use the

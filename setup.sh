@@ -19,7 +19,8 @@ PKGS_HYPR=(
 )
 PKGS_UI=(
   alacritty waybar swaync rofi brightnessctl network-manager-applet
-  pavucontrol power-profiles-daemon swappy dolphin obsidian chromium
+  pavucontrol power-profiles-daemon swappy nautilus gvfs gsimplecal obsidian chromium
+  python xdg-user-dirs xdg-desktop-portal-gtk
 )
 PKGS_AUDIO=(pipewire pipewire-alsa pipewire-pulse wireplumber alsa-utils sof-firmware)
 PKGS_NETWORK=(networkmanager linux-firmware pciutils openbsd-netcat)
@@ -63,6 +64,7 @@ DO_UPDATE=1
 ENABLE_SERVICES=0
 DEPLOY_KANATA=0
 CONFIGURE_LID=0
+CONFIGURE_DESKTOP=0
 STOW=0
 CPU=auto
 GPU=auto
@@ -96,6 +98,8 @@ Post-install setup; does not install Arch or format disks.
   --enable-services     Enable selected NetworkManager/Bluetooth/power/time units
                         Does not start services; never enables SSH, VPN or Docker
   --stow                Simulate, then link this checkout to HOME; no --adopt
+  --configure-desktop   Set up Files bookmarks/dark mode and Monday-first calendar
+                        Requires ui; normal user; no application/service restart
   --deploy-kanata       Validate/deploy Kanata; explicitly enable and restart it
                         Requires the keyboard group; normal user, not root
   --configure-lid       Stay awake on lid close, on battery/AC/dock; detect sensor
@@ -149,6 +153,7 @@ while [[ $# -gt 0 ]]; do
     --enable-services) ENABLE_SERVICES=1; shift ;;
     --deploy-kanata) DEPLOY_KANATA=1; shift ;;
     --configure-lid) CONFIGURE_LID=1; shift ;;
+    --configure-desktop) CONFIGURE_DESKTOP=1; shift ;;
     --stow) STOW=1; shift ;;
     --configs-only) CONFIGS_ONLY=1; shift ;;
     --include-private-configs) INCLUDE_PRIVATE_CONFIGS=1; shift ;;
@@ -207,7 +212,7 @@ elif [[ -n "$CONFIG_APPS" || -n "$CONFIG_SSH_CONTROL_PATH" || $INCLUDE_PRIVATE_C
   die "Config migration options require --copy-app-configs-from"
 fi
 if [[ $CONFIGS_ONLY -eq 1 ]]; then
-  [[ $ENABLE_SERVICES -eq 0 && $STOW -eq 0 && $DEPLOY_KANATA -eq 0 && $CONFIGURE_LID -eq 0 && ${#ONLY_GROUPS[@]} -eq 0 && ${#EXTRA_GROUPS[@]} -eq 0 && "$CPU" == auto && "$GPU" == auto && "$AUR_HELPER" == none ]] || die "--configs-only cannot be combined with package, service or Stow selection"
+  [[ $ENABLE_SERVICES -eq 0 && $STOW -eq 0 && $DEPLOY_KANATA -eq 0 && $CONFIGURE_LID -eq 0 && $CONFIGURE_DESKTOP -eq 0 && ${#ONLY_GROUPS[@]} -eq 0 && ${#EXTRA_GROUPS[@]} -eq 0 && "$CPU" == auto && "$GPU" == auto && "$AUR_HELPER" == none ]] || die "--configs-only cannot be combined with package, service or Stow selection"
   copy_app_configs
   exit $?
 fi
@@ -251,6 +256,11 @@ for group in "${EXTRA_GROUPS[@]}"; do SELECTED["$group"]=1; done
 [[ -z "${SELECTED[amd]+x}" || -z "${SELECTED[intel]+x}" ]] || die "Select only one CPU microcode group"
 KANATA_HELPER="$REPO_DIR/scripts/keyboard/kanata-deploy/kanata-deploy.sh"
 LID_HELPER="$REPO_DIR/scripts/desktop/hypr-lid-deploy/configure-host.sh"
+DESKTOP_HELPER="$REPO_DIR/scripts/desktop/configure-desktop/configure_desktop.py"
+if [[ $CONFIGURE_DESKTOP -eq 1 ]]; then
+  [[ -n "${SELECTED[ui]+x}" ]] || die "--configure-desktop requires the ui group"
+  [[ -f "$DESKTOP_HELPER" ]] || die "Missing desktop configuration helper"
+fi
 if [[ $DEPLOY_KANATA -eq 1 ]]; then
   [[ -n "${SELECTED[keyboard]+x}" ]] || die "--deploy-kanata requires the keyboard group"
   [[ -f "$KANATA_HELPER" && -f "$REPO_DIR/.config/systemd/kanata.service" && -f "$REPO_DIR/.config/kanata/kanata.kbd" ]] || die "Missing Kanata deployment files"
@@ -262,7 +272,7 @@ fi
 
 command -v pacman >/dev/null 2>&1 || die "Run this script on an installed Arch Linux system"
 if [[ $DRY_RUN -eq 0 && $CHECK_ONLY -eq 0 ]]; then
-  if [[ "$AUR_HELPER" != none || $STOW -eq 1 || $DEPLOY_KANATA -eq 1 || $CONFIGURE_LID -eq 1 ]]; then
+  if [[ "$AUR_HELPER" != none || $STOW -eq 1 || $DEPLOY_KANATA -eq 1 || $CONFIGURE_LID -eq 1 || $CONFIGURE_DESKTOP -eq 1 ]]; then
     [[ $EUID -ne 0 ]] || die "Run AUR, dotfile and hardware setup as your normal user, not root"
   fi
 fi
@@ -383,6 +393,9 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
   if [[ $CONFIGURE_LID -eq 1 ]]; then
     if ! bash "$LID_HELPER" --check; then incomplete=1; fi
   fi
+  if [[ $CONFIGURE_DESKTOP -eq 1 ]]; then
+    if ! python3 "$DESKTOP_HELPER" --check; then incomplete=1; fi
+  fi
   exit "$incomplete"
 fi
 
@@ -413,6 +426,7 @@ if [[ $ENABLE_SERVICES -eq 1 && ${#SERVICES[@]} -gt 0 ]]; then
   run_as_root systemctl enable "${SERVICES[@]}"
 fi
 if [[ $STOW -eq 1 ]]; then stow_dotfiles; fi
+if [[ $CONFIGURE_DESKTOP -eq 1 ]]; then run python3 "$DESKTOP_HELPER" --apply; fi
 if [[ $DEPLOY_KANATA -eq 1 ]]; then
   if [[ $DRY_RUN -eq 0 ]] && ! pacman -Q kanata &>/dev/null; then
     echo 'Kanata deployment pending: install/review kanata first.'
