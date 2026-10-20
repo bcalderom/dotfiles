@@ -1,24 +1,26 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "private-grafana": {
-      "type": "local",
-      "command": ["uvx", "mcp-grafana==2.0.2", "--usage-stats=disabled"],
-      "enabled": false,
-      "environment": {
-        "GRAFANA_URL": "https://grafana.example.com",
-        "GRAFANA_SERVICE_ACCOUNT_TOKEN_FILE": "/home/user/.config/opencode/secrets/grafana.token"
-      }
-    },
-    "private-mysql": {
-      "type": "local",
-      "command": ["/home/user/.config/opencode/toolbox/local/mysql-mcp"],
-      "enabled": false,
-      "environment": {
-        "MYSQL_DATABASE": "example",
-        "MYSQL_SSH_TARGET": "database_alias"
+    "servers": {
+      "private-grafana": {
+        "type": "local",
+        "command": ["uvx", "mcp-grafana==2.0.2", "--usage-stats=disabled"],
+        "disabled": true,
+        "environment": {
+          "GRAFANA_URL": "https://grafana.example.com",
+          "GRAFANA_SERVICE_ACCOUNT_TOKEN_FILE": "/home/user/.config/opencode/secrets/grafana.token"
+        }
       },
-      "timeout": 30000
+      "private-mysql": {
+        "type": "local",
+        "command": ["/home/user/.config/opencode/toolbox/local/mysql-mcp"],
+        "disabled": true,
+        "environment": {
+          "MYSQL_DATABASE": "example",
+          "MYSQL_SSH_TARGET": "database_alias"
+        },
+        "timeout": { "catalog": 30000, "execution": 30000 }
+      }
     }
   }
 }

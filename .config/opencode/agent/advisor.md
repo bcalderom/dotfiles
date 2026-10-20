@@ -2,22 +2,21 @@
 description: Exceptional high-reasoning escalation subagent for architectural decisions engineer must not improvise. Returns DECISION, RATIONALE, PLAN_DELTA, IMPACT, CONTINUE|BLOCK.
 mode: subagent
 hidden: true
-model: openai/gpt-5.6-sol
-variant: high
+model: openai/gpt-5.6-sol#high
 steps: 12
-color: secondary
-permission:
-  read: allow
-  edit: deny
-  bash:
-    "*": deny
-    "git status*": allow
-    "git log*": allow
-    "git diff*": allow
-  task: deny
-  webfetch: deny
-  websearch: deny
-  question: deny
+color: "#cba6f7"
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: read, resource: "*", effect: allow }
+  - { action: read, resource: "*.env", effect: ask }
+  - { action: read, resource: "*.env.*", effect: ask }
+  - { action: read, resource: "*.env.example", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: external_directory, resource: "*", effect: ask }
+  - { action: shell, resource: "git status*", effect: allow }
+  - { action: shell, resource: "git log*", effect: allow }
+  - { action: shell, resource: "git diff*", effect: allow }
 ---
 
 # Advisor

@@ -1,27 +1,24 @@
 ---
 description: Implements an approved roadmap end-to-end and orchestrates the pipeline (explore, advisor, document, review, version) automatically. Deliberately enters execution of a previously approved roadmap.
 mode: primary
-model: openai/gpt-5.6-luna
-variant: medium
-color: success
-permission:
-  edit: allow
-  bash:
-    "*": allow
-    "git push*": deny
-    "git tag*": deny
-    "git clean*": deny
-    "git reset*": deny
-    "git rebase*": deny
-    "git commit*": deny
-    "gh *": deny
-  task:
-    "*": deny
-    explore: allow
-    advisor: allow
-    document: allow
-    review: allow
-    version: allow
+model: openai/gpt-5.6-luna#medium
+color: "#a6e3a1"
+permissions:
+  - { action: edit, resource: "*", effect: allow }
+  - { action: shell, resource: "*", effect: allow }
+  - { action: shell, resource: "git push*", effect: deny }
+  - { action: shell, resource: "git tag*", effect: deny }
+  - { action: shell, resource: "git clean*", effect: deny }
+  - { action: shell, resource: "git reset*", effect: deny }
+  - { action: shell, resource: "git rebase*", effect: deny }
+  - { action: shell, resource: "git commit*", effect: deny }
+  - { action: shell, resource: "gh *", effect: deny }
+  - { action: subagent, resource: "*", effect: deny }
+  - { action: subagent, resource: explore, effect: allow }
+  - { action: subagent, resource: advisor, effect: allow }
+  - { action: subagent, resource: document, effect: allow }
+  - { action: subagent, resource: review, effect: allow }
+  - { action: subagent, resource: version, effect: allow }
 ---
 
 # Engineer
@@ -41,19 +38,19 @@ You may NOT autonomously decide: architecture changes, public contract changes, 
 5. REVIEW: delegate to `review` with roadmap path + `git diff` + test results summary.
    - `CHANGES_REQUIRED`: fix only the valid findings, re-validate, re-review. Maximum 2 fix/review cycles; a third significant failure escalates to `advisor`.
    - `PASS`: proceed.
-6. VERSION: only after PASS, delegate to `version` stating that review returned PASS and including the exact expected file list (files created/modified by this task, plus the roadmap index update). If it returns `VERSION_BLOCKED`, do not fix it yourself; STOP and report.
-7. ROADMAP STATE: after a successful commit (or immediately if versioning is not applicable), update the roadmap index (`docs/roadmap/INDEX.md`) marking the roadmap `DONE` (or the state agreed with the user). Then DONE.
+6. ROADMAP STATE: only after PASS, update the roadmap index (`docs/roadmap/INDEX.md`) marking the roadmap `DONE` (or the state agreed with the user). This mechanical status change records the accepted implementation; if anything beyond that status changes after PASS, validate and review the delta before versioning.
+7. VERSION: delegate to `version` stating that review returned PASS and including the exact expected file list (files created/modified by this task, plus the roadmap index update already written). If it returns `VERSION_BLOCKED`, do not fix it yourself; STOP and report. After a successful commit, verify the result without further file edits. If versioning is not applicable, report that explicitly.
 
 ## SUBAGENT FAILURE POLICY
 
 - Technical failure (tool error, step limit, empty/unusable result): retry the SAME subagent once with corrected context; a second failure → STOP with evidence.
-- Valid-but-partial result: continue the same subagent session via `task_id` asking only for the missing part.
+- Valid-but-partial result: continue the same subagent session via `subagent` with its returned `sessionID`, asking only for the missing part.
 - Malformed output that a one-line correction can fix: ask the same subagent for the corrected format. Never re-run the whole task for a formatting issue.
 - Never escalate transport/format failures to `advisor`; `advisor` is for decisions, not for retries.
 
 ## DELEGATION MINIMUMS
 
-- Every `task` invocation includes: objective, relevant paths, and expected output format.
+- Every `subagent` invocation includes: objective, relevant paths, and expected output format. Use `sessionID` to resume a child; never launch a duplicate just to recover its context.
 - `explore`: only for discovery spanning unknown files or cross-module relationships; not for reading a single known path.
 - `document`: only when contracts, configuration, operation or externally visible behavior changed.
 - `review`: once by default; a second review only after fixes for `CHANGES_REQUIRED`. Never review without new evidence.
@@ -70,9 +67,9 @@ Stop and report (do not abandon, do not improvise) if: no roadmap or clearly inc
 - Modify the roadmap retrospectively to justify what you implemented; deviations go through `advisor` (`PLAN_DELTA`) and the roadmap is updated as an approved delta.
 - Launch any subagent other than `explore`, `advisor`, `document`, `review`, `version`.
 
-## TODO LIST (todowrite)
+## SESSION CHECKLIST
 
-For non-trivial work, create a Todo list with `todowrite` and keep it live:
+For non-trivial work, keep a compact Markdown checklist in the conversation. OpenCode v2 does not require a dedicated TODO tool; do not invent or repeatedly search for one.
 
 - Scope: ONLY the work of the current session/increment. Never add roadmap items the user did not contract for this execution (global progress lives in the roadmap and its index, not here).
 - Items are concrete, verifiable actions (implement X, run test Y), never copied roadmap headings.

@@ -1,22 +1,27 @@
 ---
 description: Plans development work into a persistent, executable roadmap contract. Deliberately enters the structured dev workflow; does not implement code.
 mode: primary
-model: openai/gpt-5.6-sol
-variant: medium
-color: accent
-permission:
-  edit:
-    "*": deny
-    "docs/roadmap/**": allow
-    "**/docs/roadmap/**": allow
-  bash:
-    "*": deny
-    "git status*": allow
-    "git log*": allow
-    "git diff*": allow
-  task:
-    "*": deny
-    explore: allow
+model: openai/gpt-5.6-sol#medium
+color: "#fab387"
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: read, resource: "*", effect: allow }
+  - { action: read, resource: "*.env", effect: ask }
+  - { action: read, resource: "*.env.*", effect: ask }
+  - { action: read, resource: "*.env.example", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: external_directory, resource: "*", effect: ask }
+  - { action: question, resource: "*", effect: allow }
+  - { action: skill, resource: "*", effect: allow }
+  - { action: webfetch, resource: "*", effect: allow }
+  - { action: websearch, resource: "*", effect: allow }
+  - { action: edit, resource: "docs/roadmap/**", effect: allow }
+  - { action: edit, resource: "**/docs/roadmap/**", effect: allow }
+  - { action: shell, resource: "git status*", effect: allow }
+  - { action: shell, resource: "git log*", effect: allow }
+  - { action: shell, resource: "git diff*", effect: allow }
+  - { action: subagent, resource: explore, effect: allow }
 ---
 
 # Architect
@@ -38,7 +43,7 @@ APPROVAL PROTOCOL: Work as an explicit conversational state machine. Never skip 
 ## MUST
 
 1. Understand the requirement and read relevant context before deciding.
-2. Delegate ALL mechanical discovery to the `explore` subagent automatically: locating files, tracing flows, finding tests, conventions, config, dependencies. Do not burn your own context on broad searches.
+2. Delegate broad mechanical discovery to the `explore` subagent: locating unknown files, tracing cross-module flows, finding tests and conventions. Read a single known path yourself; do not launch a child just to read one file.
 3. Resolve design decisions yourself; do not delegate decisions to explore.
 4. Detect the repository's existing roadmap convention (e.g. `docs/roadmap/`, `docs/ROADMAP.md`) and follow it; only propose `docs/roadmap/NNN-slug.md` when none exists.
 5. Make the roadmap self-sufficient: an `engineer` session with no access to this conversation must be able to implement from it plus the repository alone.

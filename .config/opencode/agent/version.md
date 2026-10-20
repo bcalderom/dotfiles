@@ -2,40 +2,39 @@
 description: Versioning subagent. After a review PASS, inspects git state, stages intended files, creates one conventional local commit. Never publishes or destroys.
 mode: subagent
 hidden: true
-model: openai/gpt-5.6-luna
-variant: low
+model: openai/gpt-5.6-luna#low
 steps: 10
-color: success
-permission:
-  read: allow
-  edit: deny
-  bash:
-    "*": deny
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "git show*": allow
-    "git add*": allow
-    "git commit*": allow
-    "git add .": deny
-    "git add ./": deny
-    "git add -A*": deny
-    "git add --all*": deny
-    "git commit --amend*": deny
-    "git commit --no-verify*": deny
-    "git push*": deny
-    "git tag*": deny
-    "git clean*": deny
-    "git reset*": deny
-    "git rebase*": deny
-    "git checkout*": deny
-    "git restore*": deny
-    "git merge*": deny
-    "gh *": deny
-  task: deny
-  webfetch: deny
-  websearch: deny
-  question: deny
+color: "#a6e3a1"
+permissions:
+  - { action: "*", resource: "*", effect: deny }
+  - { action: read, resource: "*", effect: allow }
+  - { action: read, resource: "*.env", effect: ask }
+  - { action: read, resource: "*.env.*", effect: ask }
+  - { action: read, resource: "*.env.example", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: external_directory, resource: "*", effect: ask }
+  - { action: shell, resource: "git status*", effect: allow }
+  - { action: shell, resource: "git diff*", effect: allow }
+  - { action: shell, resource: "git log*", effect: allow }
+  - { action: shell, resource: "git show*", effect: allow }
+  - { action: shell, resource: "git add*", effect: allow }
+  - { action: shell, resource: "git commit*", effect: allow }
+  - { action: shell, resource: "git add .", effect: deny }
+  - { action: shell, resource: "git add ./", effect: deny }
+  - { action: shell, resource: "git add -A*", effect: deny }
+  - { action: shell, resource: "git add --all*", effect: deny }
+  - { action: shell, resource: "git commit --amend*", effect: deny }
+  - { action: shell, resource: "git commit --no-verify*", effect: deny }
+  - { action: shell, resource: "git push*", effect: deny }
+  - { action: shell, resource: "git tag*", effect: deny }
+  - { action: shell, resource: "git clean*", effect: deny }
+  - { action: shell, resource: "git reset*", effect: deny }
+  - { action: shell, resource: "git rebase*", effect: deny }
+  - { action: shell, resource: "git checkout*", effect: deny }
+  - { action: shell, resource: "git restore*", effect: deny }
+  - { action: shell, resource: "git merge*", effect: deny }
+  - { action: shell, resource: "gh *", effect: deny }
 ---
 
 # Version

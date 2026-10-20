@@ -3,6 +3,10 @@ package.json
 package-lock.json
 bun.lock
 config.local.json
+config.local.jsonc
+cli.json
+service.json
+config.local*.backup*
 secrets/
 skills/
 toolbox/local/
