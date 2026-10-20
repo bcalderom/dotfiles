@@ -100,7 +100,8 @@ lambda_package/
 .config/autostart/
 .config/BraveSoftware/
 .config/go/
-.config/gtk-3.0/
+.config/gtk-3.0/*
+!.config/gtk-3.0/gtk.css
 .config/yay/
 .config/teams/
 .config/Microsof*/

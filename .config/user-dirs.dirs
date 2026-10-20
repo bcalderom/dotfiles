@@ -1,0 +1,6 @@
+# Personal folders shared by Nautilus and other XDG-aware applications.
+XDG_DOCUMENTS_DIR="$HOME/Documents"
+XDG_MUSIC_DIR="$HOME/Music"
+XDG_PICTURES_DIR="$HOME/Pictures"
+XDG_VIDEOS_DIR="$HOME/Videos"
+XDG_DOWNLOAD_DIR="$HOME/Downloads"

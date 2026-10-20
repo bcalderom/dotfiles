@@ -144,11 +144,6 @@ tooltip label {
   padding: 0 12px;
 }
 
-/* Slight emphasis for first applet */
-#power-profiles-daemon {
-  padding: 0 14px;
-}
-
 /* Hover feedback */
 #power-profiles-daemon:hover,
 #pulseaudio:hover,
@@ -160,6 +155,40 @@ tooltip label {
 #memory:hover,
 #privacy:hover,
 #custom-notification:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+/* One compact control pill; individual icons share the same left-click action. */
+#controls,
+#system-stats {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  margin: 5px 4px;
+  padding: 0 4px;
+}
+
+#controls:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+#controls #network,
+#controls #pulseaudio,
+#controls #power-profiles-daemon,
+#controls #custom-notification,
+#system-stats #custom-storage,
+#system-stats #temperature,
+#system-stats #cpu,
+#system-stats #memory,
+#custom-system-stats {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  margin: 0;
+  padding: 0 8px;
+}
+
+#custom-system-stats:hover {
   background: rgba(255, 255, 255, 0.10);
 }
 
@@ -193,7 +222,8 @@ tooltip label {
 }
 
 /* Temperature critical state */
-#temperature.critical {
+#temperature.critical,
+#system-stats #temperature.critical {
   background: rgba(245, 60, 60, 0.65);
   border-color: rgba(255, 255, 255, 0.25);
 }

@@ -8,43 +8,67 @@
     "clock"
   ],
   "modules-right": [
-    "battery",
-    "backlight",
-    "power-profiles-daemon",
-    "pulseaudio",
-    "network",
-    "custom/storage",
-    "temperature",
-    "cpu",
-    "memory",
+    "group/system-stats",
     "privacy",
-    "custom/notification"
+    "battery",
+    "group/controls"
   ],
+  "group/system-stats": {
+    "orientation": "horizontal",
+    "drawer": {
+      "transition-duration": 250,
+      "transition-left-to-right": false,
+      "click-to-reveal": true
+    },
+    "modules": [
+      "custom/system-stats",
+      "custom/storage",
+      "temperature",
+      "cpu",
+      "memory"
+    ]
+  },
+  "custom/system-stats": {
+    "format": "󰍛",
+    "tooltip-format": "Mostrar / ocultar recursos del sistema"
+  },
+  "group/controls": {
+    "orientation": "horizontal",
+    "modules": [
+      "network",
+      "pulseaudio",
+      "power-profiles-daemon",
+      "custom/notification"
+    ]
+  },
   "ext/workspaces": {
     "all-outputs": false,
     "sort-by-name": true,
     "on-click": "activate"
   },
   "pulseaudio": {
-    "format": "{icon}  {volume}%",
+    "format": "{icon}",
     "format-muted": "",
+    "tooltip-format": "Volumen: {volume}% · {desc}",
     "format-icons": {
       "default": [
         "",
         "",
-        " "
+        ""
       ]
     },
-    "on-click": "pavucontrol"
+    "on-click": "swaync-client -t -sw",
+    "on-click-right": "pavucontrol"
   },
   "network": {
     "interval": 5,
-    "format-wifi": "  {signalStrength}%",
-    "format-ethernet": "󰈀  {ifname}",
+    "format-wifi": "",
+    "format-ethernet": "󰈀",
     "format-disconnected": "󰖪",
     "tooltip": true,
-    "tooltip-format": "{ifname}: {ipaddr}\n{essid}",
-    "on-click": "nm-connection-editor"
+    "tooltip-format": "{ifname}: {ipaddr}\n{essid}\nClic derecho: conexiones de red",
+    "on-click": "swaync-client -t -sw",
+    "on-click-right": "nm-connection-editor"
   },
   "battery": {
     "states": {
@@ -67,6 +91,7 @@
   "power-profiles-daemon": {
     "format": "{icon}",
     "tooltip": true,
+    "on-click": "swaync-client -t -sw",
     "format-icons": {
       "default": "",
       "performance": "",
@@ -77,7 +102,8 @@
   "clock": {
     // "format": "<span>   </span>{:%A, %b %d  %H:%M}",
     "format": "{:%A, %b %d - %H:%M}",
-    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><span size=\"large\">{calendar}</span></tt>"
+    "tooltip": false,
+    "on-click": "sh -c 'if command -v gsimplecal >/dev/null 2>&1; then export LC_ALL=en_GB.utf8 LOCPATH=\"${XDG_DATA_HOME:-$HOME/.local/share}/gsimplecal/locales${LOCPATH:+:$LOCPATH}\"; exec gsimplecal; else notify-send -a Calendario \"Calendario no instalado\" \"Instala el paquete gsimplecal para abrir el calendario.\"; fi'"
   },
   "custom/storage": {
     "interval": 30,

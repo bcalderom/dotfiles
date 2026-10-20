@@ -4,6 +4,10 @@
   "positionY": "top",
   "layer": "overlay",
   "control-center-layer": "overlay",
+  "control-center-positionX": "right",
+  "control-center-positionY": "top",
+  "control-center-margin-top": 8,
+  "control-center-margin-right": 8,
   "control-center-width": 460,
   "control-center-height": 700,
   "notification-window-width": 420,
@@ -20,15 +24,56 @@
   "text-empty": "No hay notificaciones",
   "widgets": [
     "title",
+    "volume",
+    "backlight",
+    "buttons-grid",
     "dnd",
     "mpris",
     "notifications"
   ],
   "widget-config": {
     "title": {
-      "text": "Notificaciones",
+      "text": "Controles y notificaciones",
       "clear-all-button": true,
       "button-text": "Limpiar todo"
+    },
+    "volume": {
+      "label": "",
+      "show-per-app": true,
+      "empty-list-label": "No hay aplicaciones reproduciendo audio"
+    },
+    "backlight": {
+      "label": "󰃠",
+      "min": 5
+    },
+    "buttons-grid": {
+      "buttons-per-row": 2,
+      "actions": [
+        {
+          "label": "  Ahorro",
+          "command": "powerprofilesctl set power-saver"
+        },
+        {
+          "label": "  Equilibrado",
+          "command": "powerprofilesctl set balanced"
+        },
+        {
+          "label": "  Red",
+          "command": "nm-connection-editor"
+        },
+        {
+          "label": "  Audio",
+          "command": "pavucontrol"
+        },
+        {
+          "label": "  Bloquear",
+          "command": "hyprlock"
+        },
+        {
+          "label": "󰒓  Menú rápido",
+          "command": "sh -c '\"$HOME/.config/hypr/scripts/quick-menu.sh\"'"
+        }
+      ]
     },
     "dnd": {
       "text": "No molestar"

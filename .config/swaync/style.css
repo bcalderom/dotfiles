@@ -42,7 +42,9 @@
 
 .widget-title,
 .widget-dnd,
-.widget-mpris {
+.widget-mpris,
+.widget-volume,
+.widget-backlight {
   background: rgba(30, 30, 46, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 12px;
@@ -50,13 +52,38 @@
   padding: 10px;
 }
 
-.widget-title > button {
+.widget-title > button,
+.widget-buttons-grid > flowbox > flowboxchild > button {
   background: rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   color: #f5f5f5;
   padding: 6px 10px;
 }
 
-.widget-title > button:hover {
+.widget-title > button:hover,
+.widget-buttons-grid > flowbox > flowboxchild > button:hover {
   background: rgba(255, 255, 255, 0.15);
+}
+
+.widget-buttons-grid {
+  margin: 5px 0;
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+}
+
+.widget-volume scale trough,
+.widget-backlight scale trough {
+  min-height: 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.widget-volume scale highlight,
+.widget-backlight scale highlight {
+  border-radius: 6px;
+  background: #bac2de;
 }

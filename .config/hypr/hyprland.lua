@@ -18,7 +18,8 @@ hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
 
 -- Programs
 local terminal = "alacritty"
-local fileManager = "dolphin"
+-- Keep the existing file manager usable until Nautilus is installed.
+local fileManager = [[sh -c 'if command -v nautilus >/dev/null 2>&1; then exec nautilus; else exec dolphin; fi']]
 local menu = "rofi -show drun"
 local browser = "brave"
 
@@ -148,4 +149,14 @@ hl.window_rule({
     name = "windowrule-1",
     match = { class = ".*" },
     suppress_event = "maximize",
+})
+
+-- Calendar popup below the clock, centered on the current monitor.
+hl.window_rule({
+    name = "clock-calendar",
+    match = { class = "[Gg]simplecal" },
+    float = true,
+    size = { "340", "300" },
+    move = { "(monitor_w-window_w)/2", "48" },
+    rounding = 16,
 })
