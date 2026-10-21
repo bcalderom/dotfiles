@@ -14,6 +14,7 @@ command_dirs=(
   disk/topdisk
   keyboard/kanata-deploy
   network/netbird-audit
+  network/netbird-setup
   network/sdns
   obs/setup-obs
   packages/yay-cleaner

@@ -17,11 +17,46 @@ instala paquetes, no copia todo HOME y nunca detiene ni inicia aplicaciones.
 | `thunderbird` | `.thunderbird`, `.config/thunderbird` si existen; incluye correo local |
 | `spotify` | `.config/spotify` (sin caché multimedia) |
 | `opencode` | Ajustes y definiciones globales de OpenCode v2; selección detallada abajo |
+| `ssh` | `.ssh/config`, `.ssh/known_hosts`; identidades solo con `--ssh-key BASENAME` |
 
 Se exige elegir nombres explícitos; no hay un selector `all`. Se omiten cachés
 gráficas, Crashpad y locks transitorios. Cookies, preferencias, extensiones y
 sesiones guardadas pueden contener información privada: no se muestran sus
 valores, no se incluyen en Git y solo se copian con consentimiento explícito.
+
+## SSH: aliases y llaves expresamente autorizadas
+
+Por defecto, `ssh` selecciona únicamente los aliases/configuración y los hosts
+conocidos que existan. No recorre ni copia todo `~/.ssh`. Para incluir una llave,
+indicar su nombre exacto, relativo a `.ssh`, con una opción por identidad:
+
+```bash
+bash setup.sh --configs-only --copy-app-configs-from boris@HOST_ANTIGUO \
+  --config-apps ssh --ssh-key id_rsa --dry-run
+```
+
+La simulación solo lee metadatos, no el contenido de las llaves. Para ejecutar,
+reemplazar `--dry-run` por `--include-private-configs` y escribir en la terminal
+`COPY ssh KEYS id_rsa`. La selección de una llave no autoriza otras. Se incluye su
+archivo `.pub` solo si existe en el origen; si falta allí pero existe un `.pub`
+anterior en destino, se detiene la migración para revisar el par antes de sustituirlo.
+
+Se verifican checksums antes de integrar. La carpeta SSH queda en `700` y los
+archivos seleccionados en `600`; los anteriores se respaldan en el lote privado.
+`config` y `known_hosts` se **reemplazan con respaldo**, no se fusionan: revisar el
+plan para no perder aliases o entradas de confianza nuevas del destino. Las demás
+llaves, `authorized_keys`, certificados y sockets de agente quedan intactos. No se
+inicia `sshd`, no se cierran sesiones y no se relaja la verificación del servidor.
+
+Solo se admiten archivos normales del usuario, sin enlaces; las llaves privadas
+del origen no pueden tener permisos para grupo/otros. No se reescriben rutas
+absolutas ni se siguen directivas `Include`: revisar esos archivos por separado.
+Los aliases sin `IdentityFile` usan las rutas predeterminadas de OpenSSH, por
+ejemplo `~/.ssh/id_rsa`; una llave con otro nombre necesita `IdentityFile` o `-i`.
+
+NetBird **no** es una aplicación migrable con este helper: sus perfiles contienen
+identidad de peer. Usar [la configuración explícita de NetBird](../../network/netbird-setup/README.md)
+para registrar el nuevo equipo sin clonar claves privadas.
 
 ## Uso mediante setup
 
@@ -46,7 +81,8 @@ bash setup.sh --configs-only --copy-app-configs-from boris@HOST_ANTIGUO \
   --dry-run
 ```
 
-Cerrar las aplicaciones seleccionadas **en ambos hosts** y revisar la simulación.
+Cerrar las aplicaciones de escritorio seleccionadas **en ambos hosts** y revisar
+la simulación. Los archivos cliente de SSH no requieren cerrar sesiones SSH.
 El control se hace por nombres de procesos del usuario; no detecta programas con
 nombres personalizados o escritores externos. No abrir las aplicaciones mientras
 se realiza la copia. No se mata ningún proceso automáticamente.
@@ -111,7 +147,8 @@ Referencias de OpenCode v2: [configuración global](https://opencode.ai/v2/docs/
   sin copiar/borrar el original. Ante fallos se conserva el staging y el respaldo;
   las rutas ya integradas figuran en `manifest.json`. No repetir ni restaurar a
   ciegas: cerrar las aplicaciones y comparar las rutas con ese manifiesto.
-- No se copian llaveros, `~/.ssh`, AWS ni otros datos fuera de las rutas indicadas.
+- No se copian llaveros, AWS ni otros datos fuera de las rutas indicadas. De SSH
+  solo se copian los archivos y las identidades elegidos expresamente, nunca la carpeta entera.
   Las contraseñas/sesiones de navegadores pueden necesitar su llavero original o
   reautenticación. La copia del perfil no garantiza poder descifrarlas.
 - No se traducen rutas internas ni se garantiza compatibilidad con versiones

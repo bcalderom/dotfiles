@@ -135,6 +135,28 @@ Thunderbird includes local mail. OpenCode v2 copies global settings/definitions,
 not session history, provider credentials or service registration; close its
 clients and background service manually before copying.
 
+SSH aliases/trusted hosts and specifically authorized identities use the same
+guarded migration, without copying the entire `.ssh` directory:
+
+```bash
+bash setup.sh --configs-only --copy-app-configs-from boris@OLD_HOST \
+  --config-apps ssh --ssh-key id_rsa --dry-run
+```
+
+Real copying requires `--include-private-configs` and confirmation naming the key.
+Existing selected files are backed up; SSH sessions and unrelated keys are kept.
+
+NetBird installs both CLI and GUI in the `vpn` group. Activation/login is separate
+and explicit; normal `--enable-services` still never starts a VPN or SSH server:
+
+```bash
+bash setup.sh --only vpn --aur yay --configure-netbird
+bash setup.sh --only vpn --check --configure-netbird
+```
+
+Use interactive SSO in the same account/organization. Never copy NetBird profiles
+or peer keys between machines. See [NetBird setup and identity safeguards](scripts/network/netbird-setup/README.md).
+
 ## Terminal sessions
 
 `Alt-S` opens the shared sesh picker from the shell or a tmux popup. It supports

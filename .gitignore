@@ -97,6 +97,7 @@ deployment_package/
 lambda_package/
 
 # Linux .config
+.ssh/
 .config/autostart/
 .config/BraveSoftware/
 .config/go/

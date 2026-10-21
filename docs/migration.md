@@ -131,9 +131,9 @@ La ausencia de un programa en el historial no demuestra que no se utilice.
 | --- | --- |
 | `base` | SSH/rsync, Neovim, Zsh, Git, tmux, fzf, fd, eza y herramientas de scripts |
 | `dev` | OpenCode/tds/sesh, HeidiSQL Qt6, AWS CLI, GitHub CLI, LazyGit, Node, Python/pyenv/uv y compilación |
-| `hypr`, `ui` | Escritorio existente, Brave, Chromium, Dolphin, captura, bloqueo, notificaciones y tapa |
+| `hypr`, `ui` | Escritorio existente, Brave, Chromium, Files/Nautilus, calendario, captura, bloqueo, notificaciones y tapa |
 | `audio`, `network`, `bluetooth`, `fonts` | Dependencias de un escritorio funcional |
-| `keyboard`, `vpn` | Kanata, NordVPN y NetBird; configuración/autenticación aparte |
+| `keyboard`, `vpn` | Kanata, NordVPN y NetBird CLI/GUI; activación/autenticación explícitas |
 | `amd`, `intel`, `amd-gpu`, `intel-gpu` | Microcódigo y gráficos independientes, según detección |
 | `docker` | Docker y Compose; no arranca ni habilita Docker |
 | `printing` | CUPS, descubrimiento y escáner; controladores y colas aparte |
@@ -293,6 +293,38 @@ de Stow se rechazan: restaurarlos mediante Stow, sin forzar su reemplazo.
 
 Consultar [rutas, límites, restauración y pruebas](../scripts/system/migrate-app-configs/README.md).
 No subir configuraciones privadas o perfiles al repositorio.
+
+### SSH y NetBird
+
+La copia de cliente SSH es independiente de la activación de la VPN:
+
+```bash
+bash setup.sh --configs-only --copy-app-configs-from boris@HOST_ANTIGUO \
+  --config-apps ssh --ssh-key id_rsa --dry-run
+```
+
+Solo se seleccionan `config`, `known_hosts` y las identidades nombradas. Para
+copiar, usar `--include-private-configs` y confirmar la frase con sus nombres.
+No se inicia `sshd`, no se copian todas las llaves ni se modifica `authorized_keys`.
+Revisar el plan: los archivos seleccionados se reemplazan con respaldo, no se mezclan.
+
+Para NetBird, ejecutar como usuario normal desde una terminal interactiva:
+
+```bash
+bash setup.sh --only vpn --aur yay --configure-netbird
+bash setup.sh --only vpn --configure-netbird --check
+```
+
+Instala CLI y GUI; la opción explícita habilita/inicia el servicio empaquetado y
+ejecuta el inicio de sesión SSO si hace falta. `--enable-services` por sí sola
+no activa NetBird. Un servidor propio se elige con `--netbird-management-url` y
+el nombre inicial con `--netbird-hostname`; no se mueve ni renombra un peer ya
+registrado. No se activa el servidor SSH de NetBird.
+
+**Nunca copiar** `/etc/netbird`, `/var/lib/netbird`, perfiles o claves WireGuard
+del equipo antiguo: clonaría su identidad. El nuevo equipo debe autenticarse en
+la misma cuenta/organización con una identidad propia. Revisar grupos/aprobación
+en el panel si faltan accesos. Ver [helper y límites de NetBird](../scripts/network/netbird-setup/README.md).
 
 ## 4. Transferencia de datos por red
 

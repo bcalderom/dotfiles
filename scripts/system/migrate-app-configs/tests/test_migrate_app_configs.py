@@ -151,6 +151,87 @@ class ConfigMigrationTests(unittest.TestCase):
                 roots = migration.Source(str(self.source), [app]).inspect()["roots"]
                 self.assertEqual([root["path"] for root in roots], [relative])
 
+    def ssh_fixture(self):
+        directory = self.source / ".ssh"
+        directory.mkdir(mode=0o700)
+        (directory / "config").write_text("Host fixture\n  HostName example.test\n")
+        (directory / "known_hosts").write_text("synthetic trusted-host fixture\n")
+        key = directory / "id_rsa"
+        key.write_text("PRIVATE_FIXTURE selected identity\n")
+        key.chmod(0o600)
+        (directory / "id_rsa.pub").write_text("synthetic public-key fixture\n")
+        (directory / "unselected_key").write_text("PRIVATE_FIXTURE do not copy\n")
+        (directory / "authorized_keys").write_text("server authorization must not migrate\n")
+        return directory
+
+    def test_ssh_defaults_never_select_private_identities(self):
+        self.ssh_fixture()
+        roots = migration.Source(str(self.source), ["ssh"]).inspect()["roots"]
+        self.assertEqual({root["path"] for root in roots}, {".ssh/config", ".ssh/known_hosts"})
+        self.assertTrue(all(root["kind"] == "file" for root in roots))
+        self.assertNotIn("PRIVATE_FIXTURE", self.output.getvalue())
+
+    def test_ssh_keys_require_explicit_safe_names_and_selection(self):
+        for key in ("../id_rsa", "/id_rsa", "*", "config", "authorized_keys", "known_hosts", "id_rsa.pub"):
+            with self.subTest(key=key), self.assertRaises(migration.MigrationError):
+                migration.Source(str(self.source), ["ssh"], ssh_keys=[key])
+        with self.assertRaises(migration.MigrationError):
+            migration.Source(str(self.source), ["marktext"], ssh_keys=["id_rsa"])
+        self.ssh_fixture()
+        with self.assertRaisesRegex(migration.MigrationError, "not found"):
+            migration.Source(str(self.source), ["ssh"], ssh_keys=["missing_key"]).inspect()
+        self.assertNotIn(".ssh/id_rsa", migration.APPS["ssh"]["paths"])
+
+    def test_ssh_preview_reads_metadata_only_and_rejects_open_key_permissions(self):
+        directory = self.ssh_fixture()
+        source = migration.Source(str(self.source), ["ssh"], ssh_keys=["id_rsa"])
+        with patch.object(Path, "read_text", side_effect=AssertionError("contents must not be read")):
+            with patch.object(Path, "read_bytes", side_effect=AssertionError("contents must not be read")):
+                migration.migrate(source, ["ssh"], self.home, dry_run=True)
+        self.assertFalse((self.home / ".ssh").exists())
+        (directory / "id_rsa").chmod(0o644)
+        with self.assertRaisesRegex(ValueError, "other users"):
+            source.inspect()
+
+    @unittest.skipIf(os.geteuid() == 0 or not shutil.which("rsync"), "requires rsync and normal user")
+    def test_ssh_copy_requires_key_confirmation_and_preserves_other_keys(self):
+        self.ssh_fixture()
+        target = self.home / ".ssh"
+        target.mkdir(mode=0o755)
+        (target / "config").write_text("previous aliases\n")
+        (target / "authorized_keys").write_text("destination server authorization\n")
+        (target / "other_key").write_text("destination unrelated identity\n")
+        source = migration.Source(str(self.source), ["ssh"], ssh_keys=["id_rsa"])
+        with patch.object(migration.sys.stdin, "isatty", return_value=True):
+            with self.assertRaises(migration.MigrationError):
+                migration.migrate(source, ["ssh"], self.home, include_private=True,
+                                  confirm=lambda _: "COPY ssh")
+            batch = migration.migrate(source, ["ssh"], self.home, include_private=True,
+                                      confirm=lambda _: "COPY ssh KEYS id_rsa")
+        self.assertEqual((target / "id_rsa").read_text(), "PRIVATE_FIXTURE selected identity\n")
+        self.assertFalse((target / "unselected_key").exists())
+        self.assertEqual((target / "other_key").read_text(), "destination unrelated identity\n")
+        self.assertEqual((target / "authorized_keys").read_text(), "destination server authorization\n")
+        self.assertEqual((batch / "backup/.ssh/config").read_text(), "previous aliases\n")
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o700)
+        for name in ("config", "known_hosts", "id_rsa", "id_rsa.pub"):
+            self.assertEqual(stat.S_IMODE((target / name).stat().st_mode), 0o600)
+        self.assertNotIn("PRIVATE_FIXTURE", self.output.getvalue())
+
+    def test_netbird_private_profiles_are_not_a_migration_app(self):
+        with self.assertRaises(migration.MigrationError):
+            migration.parse_apps("netbird")
+
+    def test_ssh_does_not_leave_a_stale_public_companion(self):
+        directory = self.ssh_fixture()
+        (directory / "id_rsa.pub").unlink()
+        target = self.home / ".ssh"
+        target.mkdir(mode=0o700)
+        (target / "id_rsa.pub").write_text("previous identity's public companion\n")
+        source = migration.Source(str(self.source), ["ssh"], ssh_keys=["id_rsa"])
+        with self.assertRaisesRegex(migration.MigrationError, "public companion"):
+            migration.migrate(source, ["ssh"], self.home, dry_run=True)
+
     def test_new_apps_and_opencode_service_must_be_closed(self):
         for app, process in (("teams-for-linux", "teams-for-linux"), ("thunderbird", "thunderbird"),
                              ("spotify", "spotify"), ("opencode", "opencode"), ("opencode", "opencode-server")):

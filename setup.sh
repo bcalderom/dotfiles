@@ -24,6 +24,7 @@ PKGS_UI=(
 )
 PKGS_AUDIO=(pipewire pipewire-alsa pipewire-pulse wireplumber alsa-utils sof-firmware)
 PKGS_NETWORK=(networkmanager linux-firmware pciutils openbsd-netcat)
+PKGS_VPN=(python)
 PKGS_BLUETOOTH=(bluez bluez-utils)
 PKGS_FONTS=(
   ttf-ubuntu-mono-nerd ttf-jetbrains-mono-nerd noto-fonts noto-fonts-cjk
@@ -45,7 +46,7 @@ declare -A AUR_GROUPS=(
   [dev]="sesh-bin heidisql-qt6"
   [ui]="brave-bin"
   [keyboard]="kanata"
-  [vpn]="nordvpn-bin netbird"
+  [vpn]="nordvpn-bin netbird netbird-ui-bin"
   [office]="onlyoffice-bin marktext-bin"
   [comms]="teams-for-linux zoom"
   [media]="spotify"
@@ -65,6 +66,10 @@ ENABLE_SERVICES=0
 DEPLOY_KANATA=0
 CONFIGURE_LID=0
 CONFIGURE_DESKTOP=0
+CONFIGURE_NETBIRD=0
+NETBIRD_MANAGEMENT_URL="https://api.netbird.io:443"
+NETBIRD_HOSTNAME=""
+NETBIRD_OPTIONS=0
 STOW=0
 CPU=auto
 GPU=auto
@@ -74,6 +79,7 @@ EXTRA_GROUPS=()
 CONFIG_SOURCE=""
 CONFIG_APPS=""
 CONFIG_SSH_CONTROL_PATH=""
+CONFIG_SSH_KEYS=()
 INCLUDE_PRIVATE_CONFIGS=0
 CONFIGS_ONLY=0
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -100,6 +106,12 @@ Post-install setup; does not install Arch or format disks.
   --stow                Simulate, then link this checkout to HOME; no --adopt
   --configure-desktop   Set up Files bookmarks/dark mode and Monday-first calendar
                         Requires ui; normal user; no application/service restart
+  --configure-netbird   Enable/start NetBird and connect through interactive SSO
+                        Requires vpn; never copies peer keys or enables NetBird SSH
+  --netbird-management-url URL
+                        HTTPS service origin (default: https://api.netbird.io:443)
+  --netbird-hostname NAME
+                        Optional hostname for first registration; never renames a peer
   --deploy-kanata       Validate/deploy Kanata; explicitly enable and restart it
                         Requires the keyboard group; normal user, not root
   --configure-lid       Stay awake on lid close, on battery/AC/dock; detect sensor
@@ -109,6 +121,9 @@ Post-install setup; does not install Arch or format disks.
                         Copy selected app settings, never the entire HOME
   --config-apps a,b      Required: onlyoffice,marktext,heidisql,chromium,brave
                         teams-for-linux,thunderbird,spotify,opencode (v2 settings)
+                        ssh (config/known_hosts; private identities require --ssh-key)
+  --ssh-key BASENAME    Explicit SSH identity to migrate, e.g. id_rsa; repeatable
+                        Requires --config-apps ssh, private consent and confirmation
   --config-ssh-control-path PATH
                         Optional existing SSH control socket for remote source
   --include-private-configs
@@ -154,15 +169,19 @@ while [[ $# -gt 0 ]]; do
     --deploy-kanata) DEPLOY_KANATA=1; shift ;;
     --configure-lid) CONFIGURE_LID=1; shift ;;
     --configure-desktop) CONFIGURE_DESKTOP=1; shift ;;
+    --configure-netbird) CONFIGURE_NETBIRD=1; shift ;;
     --stow) STOW=1; shift ;;
     --configs-only) CONFIGS_ONLY=1; shift ;;
     --include-private-configs) INCLUDE_PRIVATE_CONFIGS=1; shift ;;
-    --copy-app-configs-from|--config-apps|--config-ssh-control-path)
+    --copy-app-configs-from|--config-apps|--config-ssh-control-path|--ssh-key|--netbird-management-url|--netbird-hostname)
       require_value "$@"
       case "$1" in
         --copy-app-configs-from) CONFIG_SOURCE="$2" ;;
         --config-apps) CONFIG_APPS="$2" ;;
         --config-ssh-control-path) CONFIG_SSH_CONTROL_PATH="$2" ;;
+        --ssh-key) CONFIG_SSH_KEYS+=("$2") ;;
+        --netbird-management-url) NETBIRD_MANAGEMENT_URL="$2"; NETBIRD_OPTIONS=1 ;;
+        --netbird-hostname) NETBIRD_HOSTNAME="$2"; NETBIRD_OPTIONS=1 ;;
       esac
       shift 2 ;;
     --only|--with)
@@ -199,6 +218,7 @@ copy_app_configs() {
   if [[ $preview -eq 1 || $DRY_RUN -eq 1 || $CHECK_ONLY -eq 1 ]]; then args+=(--dry-run); fi
   if [[ $INCLUDE_PRIVATE_CONFIGS -eq 1 ]]; then args+=(--include-private-configs); fi
   if [[ -n "$CONFIG_SSH_CONTROL_PATH" ]]; then args+=(--ssh-control-path "$CONFIG_SSH_CONTROL_PATH"); fi
+  for key in "${CONFIG_SSH_KEYS[@]}"; do args+=(--ssh-key "$key"); done
   python3 "$helper" "${args[@]}"
 }
 
@@ -208,11 +228,23 @@ if [[ -n "$CONFIG_SOURCE" ]]; then
     [[ $EUID -ne 0 ]] || die "Migrate app configs as your normal user, not root"
     [[ $INCLUDE_PRIVATE_CONFIGS -eq 1 ]] || die "Real copying requires --include-private-configs"
   fi
-elif [[ -n "$CONFIG_APPS" || -n "$CONFIG_SSH_CONTROL_PATH" || $INCLUDE_PRIVATE_CONFIGS -eq 1 || $CONFIGS_ONLY -eq 1 ]]; then
+elif [[ -n "$CONFIG_APPS" || -n "$CONFIG_SSH_CONTROL_PATH" || ${#CONFIG_SSH_KEYS[@]} -gt 0 || $INCLUDE_PRIVATE_CONFIGS -eq 1 || $CONFIGS_ONLY -eq 1 ]]; then
   die "Config migration options require --copy-app-configs-from"
 fi
+if [[ ${#CONFIG_SSH_KEYS[@]} -gt 0 ]]; then
+  [[ ",$CONFIG_APPS," == *,ssh,* ]] || die "--ssh-key requires --config-apps ssh"
+  for key in "${CONFIG_SSH_KEYS[@]}"; do
+    [[ "$key" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || die "SSH identities must be explicit basenames, not paths or wildcards"
+    case "$key" in config|known_hosts|known_hosts.old|authorized_keys|*.pub) die "Select a private-key basename with --ssh-key" ;; esac
+  done
+fi
+[[ $NETBIRD_OPTIONS -eq 0 || $CONFIGURE_NETBIRD -eq 1 ]] || die "NetBird options require --configure-netbird"
+if [[ $CONFIGURE_NETBIRD -eq 1 ]]; then
+  [[ "$NETBIRD_MANAGEMENT_URL" =~ ^https://[^/@?#[:space:]]+/?$ ]] || die "NetBird requires an HTTPS origin without credentials or query parameters"
+  [[ -z "$NETBIRD_HOSTNAME" || "$NETBIRD_HOSTNAME" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] || die "Invalid NetBird hostname"
+fi
 if [[ $CONFIGS_ONLY -eq 1 ]]; then
-  [[ $ENABLE_SERVICES -eq 0 && $STOW -eq 0 && $DEPLOY_KANATA -eq 0 && $CONFIGURE_LID -eq 0 && $CONFIGURE_DESKTOP -eq 0 && ${#ONLY_GROUPS[@]} -eq 0 && ${#EXTRA_GROUPS[@]} -eq 0 && "$CPU" == auto && "$GPU" == auto && "$AUR_HELPER" == none ]] || die "--configs-only cannot be combined with package, service or Stow selection"
+  [[ $ENABLE_SERVICES -eq 0 && $STOW -eq 0 && $DEPLOY_KANATA -eq 0 && $CONFIGURE_LID -eq 0 && $CONFIGURE_DESKTOP -eq 0 && $CONFIGURE_NETBIRD -eq 0 && ${#ONLY_GROUPS[@]} -eq 0 && ${#EXTRA_GROUPS[@]} -eq 0 && "$CPU" == auto && "$GPU" == auto && "$AUR_HELPER" == none ]] || die "--configs-only cannot be combined with package, service or Stow selection"
   copy_app_configs
   exit $?
 fi
@@ -257,6 +289,13 @@ for group in "${EXTRA_GROUPS[@]}"; do SELECTED["$group"]=1; done
 KANATA_HELPER="$REPO_DIR/scripts/keyboard/kanata-deploy/kanata-deploy.sh"
 LID_HELPER="$REPO_DIR/scripts/desktop/hypr-lid-deploy/configure-host.sh"
 DESKTOP_HELPER="$REPO_DIR/scripts/desktop/configure-desktop/configure_desktop.py"
+NETBIRD_HELPER="$REPO_DIR/scripts/network/netbird-setup/configure_netbird.py"
+NETBIRD_ARGS=(--management-url "$NETBIRD_MANAGEMENT_URL")
+if [[ -n "$NETBIRD_HOSTNAME" ]]; then NETBIRD_ARGS+=(--hostname "$NETBIRD_HOSTNAME"); fi
+if [[ $CONFIGURE_NETBIRD -eq 1 ]]; then
+  [[ -n "${SELECTED[vpn]+x}" ]] || die "--configure-netbird requires the vpn group"
+  [[ -f "$NETBIRD_HELPER" ]] || die "Missing NetBird configuration helper"
+fi
 if [[ $CONFIGURE_DESKTOP -eq 1 ]]; then
   [[ -n "${SELECTED[ui]+x}" ]] || die "--configure-desktop requires the ui group"
   [[ -f "$DESKTOP_HELPER" ]] || die "Missing desktop configuration helper"
@@ -272,7 +311,7 @@ fi
 
 command -v pacman >/dev/null 2>&1 || die "Run this script on an installed Arch Linux system"
 if [[ $DRY_RUN -eq 0 && $CHECK_ONLY -eq 0 ]]; then
-  if [[ "$AUR_HELPER" != none || $STOW -eq 1 || $DEPLOY_KANATA -eq 1 || $CONFIGURE_LID -eq 1 || $CONFIGURE_DESKTOP -eq 1 ]]; then
+  if [[ "$AUR_HELPER" != none || $STOW -eq 1 || $DEPLOY_KANATA -eq 1 || $CONFIGURE_LID -eq 1 || $CONFIGURE_DESKTOP -eq 1 || $CONFIGURE_NETBIRD -eq 1 ]]; then
     [[ $EUID -ne 0 ]] || die "Run AUR, dotfile and hardware setup as your normal user, not root"
   fi
 fi
@@ -305,6 +344,7 @@ for group in "${ALL_GROUPS[@]}"; do
     ui) packages=("${PKGS_UI[@]}") ;;
     audio) packages=("${PKGS_AUDIO[@]}") ;;
     network) packages=("${PKGS_NETWORK[@]}") ;;
+    vpn) packages=("${PKGS_VPN[@]}") ;;
     bluetooth) packages=("${PKGS_BLUETOOTH[@]}") ;;
     fonts) packages=("${PKGS_FONTS[@]}") ;;
     docker) packages=("${PKGS_DOCKER[@]}") ;;
@@ -317,7 +357,7 @@ for group in "${ALL_GROUPS[@]}"; do
     intel) packages=("${PKGS_INTEL[@]}") ;;
     amd-gpu) packages=("${PKGS_AMD_GPU[@]}") ;;
     intel-gpu) packages=("${PKGS_INTEL_GPU[@]}") ;;
-    keyboard|vpn|comms) packages=() ;;
+    keyboard|comms) packages=() ;;
   esac
   for package in "${packages[@]}"; do
     [[ -z "${SEEN[$package]+x}" ]] || continue
@@ -396,6 +436,9 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
   if [[ $CONFIGURE_DESKTOP -eq 1 ]]; then
     if ! python3 "$DESKTOP_HELPER" --check; then incomplete=1; fi
   fi
+  if [[ $CONFIGURE_NETBIRD -eq 1 ]]; then
+    if ! python3 "$NETBIRD_HELPER" --check "${NETBIRD_ARGS[@]}"; then incomplete=1; fi
+  fi
   exit "$incomplete"
 fi
 
@@ -436,10 +479,20 @@ if [[ $DEPLOY_KANATA -eq 1 ]]; then
   fi
 fi
 if [[ $CONFIGURE_LID -eq 1 ]]; then run bash "$LID_HELPER" --apply; fi
+if [[ $CONFIGURE_NETBIRD -eq 1 ]]; then
+  if [[ $DRY_RUN -eq 0 ]] && ! pacman -Q netbird &>/dev/null; then
+    echo 'NetBird configuration pending: install/review netbird first.'
+    pending=1
+  else
+    run python3 "$NETBIRD_HELPER" --apply "${NETBIRD_ARGS[@]}"
+  fi
+fi
 if [[ -n "$CONFIG_SOURCE" && $DRY_RUN -eq 0 ]]; then copy_app_configs; fi
 
 if [[ $DRY_RUN -eq 0 && ( $DEPLOY_KANATA -eq 1 || $CONFIGURE_LID -eq 1 ) ]]; then
   echo "Hardware deployment was explicitly selected; no shell or disk layout changed."
+elif [[ $DRY_RUN -eq 0 && $CONFIGURE_NETBIRD -eq 1 ]]; then
+  echo "NetBird activation was explicitly selected; no shell or disk layout changed."
 else
   echo "No services started; no shell or disk layout changed."
 fi
@@ -450,7 +503,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
   exit 0
 fi
 if [[ $pending -eq 1 ]]; then
-  echo "Setup incomplete: AUR packages remain pending."
+  echo "Setup incomplete: packages or an explicitly selected deployment remain pending."
   exit 1
 fi
 echo "Selected package setup completed."

@@ -90,6 +90,8 @@ echo "python3 $*" >> "$MOCK_LOG"
 case "${1:-}" in
   */scripts/desktop/configure-desktop/configure_desktop.py)
     [[ "${MOCK_FAIL_DESKTOP:-0}" == 0 ]] || exit 8 ;;
+  */scripts/network/netbird-setup/configure_netbird.py)
+    [[ "${MOCK_FAIL_NETBIRD:-0}" == 0 ]] || exit 10 ;;
   *) [[ "${MOCK_FAIL_CONFIG:-0}" == 0 ]] || exit 7 ;;
 esac
 EOF
@@ -111,7 +113,7 @@ export PATH="$WORK/bin:$PATH"
 reset_case() {
   : > "$MOCK_LOG"
   : > "$MOCK_INSTALLED_FILE"
-  unset MOCK_CPU MOCK_GPU MOCK_PROMOTED MOCK_FAIL_INSTALL MOCK_FAIL_AUR MOCK_SERVICE_DISABLED MOCK_STOW_CONFLICT MOCK_FAIL_CONFIG MOCK_FAIL_HARDWARE MOCK_FAIL_DESKTOP
+  unset MOCK_CPU MOCK_GPU MOCK_PROMOTED MOCK_FAIL_INSTALL MOCK_FAIL_AUR MOCK_SERVICE_DISABLED MOCK_STOW_CONFLICT MOCK_FAIL_CONFIG MOCK_FAIL_HARDWARE MOCK_FAIL_DESKTOP MOCK_FAIL_NETBIRD
 }
 
 run_status() {
@@ -131,7 +133,7 @@ not_line() { ! grep -Fxq -- "$1" "$WORK/output"; }
 logged() { grep -Fq -- "$1" "$MOCK_LOG"; }
 not_logged() { ! grep -Fq -- "$1" "$MOCK_LOG"; }
 read_only() {
-  if grep -Eq '^(sudo |pacman -S(yu| )|yay -S|paru -S|systemctl enable|stow --verbose)|^(bash|python3) .* --(activate|apply)$' "$MOCK_LOG"; then
+  if grep -Eq '^(sudo |pacman -S(yu| )|yay -S|paru -S|systemctl enable|stow --verbose)|^(bash|python3) .* --(activate|apply)( |$)' "$MOCK_LOG"; then
     cat "$MOCK_LOG" >&2
     echo 'Unexpected mutation in read-only mode' >&2
     exit 1
@@ -161,6 +163,17 @@ run_status 2 --copy-app-configs-from /snapshot
 run_status 2 --only base --deploy-kanata --dry-run
 run_status 2 --only base --configure-lid --dry-run
 run_status 2 --only base --configure-desktop --dry-run
+run_status 2 --only base --configure-netbird --dry-run
+run_status 2 --netbird-hostname arch-test --dry-run
+run_status 2 --configure-netbird --netbird-management-url 'https://user:pass@example.test' --dry-run
+run_status 2 --configure-netbird --netbird-management-url 'https://example.test?token=fixture' --dry-run
+run_status 2 --configure-netbird --netbird-hostname 'not a hostname' --dry-run
+run_status 2 --ssh-key id_rsa --dry-run
+run_status 2 --copy-app-configs-from /snapshot --config-apps chromium --ssh-key id_rsa --dry-run
+for key in '../id_rsa' '/id_rsa' '*' known_hosts authorized_keys id_rsa.pub; do
+  run_status 2 --copy-app-configs-from /snapshot --config-apps ssh --ssh-key "$key" --dry-run
+done
+run_status 2 --configs-only --copy-app-configs-from /snapshot --config-apps ssh --configure-netbird --dry-run
 run_status 2 --configs-only --copy-app-configs-from /snapshot --config-apps chromium --configure-desktop --dry-run
 run_status 2 --configs-only --copy-app-configs-from /snapshot --config-apps chromium --deploy-kanata --dry-run
 run_status 2 --configs-only --copy-app-configs-from /snapshot --config-apps chromium --configure-lid --dry-run
@@ -183,6 +196,7 @@ contains 'xdg-desktop-portal-gtk'
 not_contains ' dolphin'
 contains 'openbsd-netcat'
 contains 'sesh-bin heidisql-qt6 brave-bin kanata nordvpn-bin netbird'
+contains 'netbird-ui-bin'
 not_contains ' hwloc'
 not_contains ' vim '
 not_contains '==> Group: intel'
@@ -255,6 +269,13 @@ not_logged 'sudo '
 not_logged 'systemctl '
 not_logged 'stow '
 : > "$MOCK_LOG"
+run_status 0 --configs-only --copy-app-configs-from /snapshot --config-apps ssh --ssh-key id_rsa --ssh-key work_key --dry-run
+logged 'migrate_app_configs.py --source /snapshot --apps ssh --dry-run --ssh-key id_rsa --ssh-key work_key'
+not_logged 'pacman '
+not_logged 'sudo '
+not_logged 'systemctl '
+read_only
+: > "$MOCK_LOG"
 run_status 0 --configs-only --copy-app-configs-from /snapshot --config-apps teams-for-linux,thunderbird,spotify,opencode --dry-run
 logged 'migrate_app_configs.py --source /snapshot --apps teams-for-linux,thunderbird,spotify,opencode --dry-run'
 not_logged 'pacman '
@@ -322,7 +343,7 @@ for helper in yay paru; do
     [[ ! -s "$MOCK_LOG" ]]
   else
     run_status 0 --only vpn --no-update --aur "$helper"
-    logged "$helper -S --needed nordvpn-bin netbird"
+    logged "$helper -S --needed nordvpn-bin netbird netbird-ui-bin"
     not_logged "sudo $helper"
     not_logged --noconfirm
   fi
@@ -417,6 +438,35 @@ if [[ $EUID -ne 0 ]]; then
   run_status 8 --only ui --no-update --configure-desktop
 else
   run_status 2 --only ui --no-update --configure-desktop
+fi
+
+echo '==> NetBird configuration is opt-in and cannot run in previews/checks'
+reset_case
+echo '*' > "$MOCK_INSTALLED_FILE"
+run_status 0 --only vpn --no-update
+not_logged 'configure_netbird.py'
+run_status 0 --only vpn --configure-netbird --netbird-hostname arch-test --dry-run
+contains 'configure_netbird.py --apply'
+not_logged 'configure_netbird.py --apply'
+read_only
+run_status 0 --only vpn --configure-netbird --check
+logged 'configure_netbird.py --check'
+read_only
+export MOCK_FAIL_NETBIRD=1
+run_status 1 --only vpn --configure-netbird --check
+read_only
+unset MOCK_FAIL_NETBIRD
+if [[ $EUID -ne 0 ]]; then
+  run_status 0 --only vpn --configure-netbird --netbird-hostname arch-test --no-update
+  logged 'configure_netbird.py --apply --management-url https://api.netbird.io:443 --hostname arch-test'
+  export MOCK_FAIL_NETBIRD=1
+  run_status 10 --only vpn --configure-netbird --no-update
+  reset_case
+  run_status 1 --only vpn --configure-netbird --no-update
+  contains 'NetBird configuration pending'
+  not_logged 'configure_netbird.py --apply'
+else
+  run_status 2 --only vpn --configure-netbird --no-update
 fi
 
 echo '==> stow conflict prevents linking'

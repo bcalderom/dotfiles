@@ -2,6 +2,7 @@
 """Opt-in migration of named application settings; never reads settings into logs."""
 
 import argparse
+import copy
 import inspect
 import json
 import os
@@ -17,6 +18,8 @@ import tempfile
 
 
 APPS = {
+    "ssh": {"paths": [".ssh/config", ".ssh/known_hosts"],
+            "files": [".ssh/config", ".ssh/known_hosts"], "processes": []},
     "onlyoffice": {"paths": [".config/onlyoffice", ".local/share/onlyoffice"], "processes": ["DesktopEditors", "desktopeditors", "onlyoffice"]},
     "marktext": {"paths": [".config/marktext"], "processes": ["marktext"]},
     "heidisql": {"paths": [".config/heidisql"], "processes": ["heidisql", "heidisql-qt6"]},
@@ -79,6 +82,8 @@ def probe(home, specs, skip):
             count = 0
             metadata = hashlib.sha256()
             root_info = root.stat()
+            if relative in spec.get("private_keys", []) and stat.S_IMODE(root_info.st_mode) & 0o077:
+                raise ValueError("SSH identity must not be accessible to other users: " + relative)
             metadata.update(str((root_info.st_mode, root_info.st_size, root_info.st_mtime_ns)).encode())
 
             def walk_error(error):
@@ -113,8 +118,21 @@ def parse_apps(value):
 
 
 class Source:
-    def __init__(self, value, apps, control_path=None):
-        self.specs = {app: APPS[app] for app in apps}
+    def __init__(self, value, apps, control_path=None, ssh_keys=None):
+        self.specs = {app: copy.deepcopy(APPS[app]) for app in apps}
+        self.ssh_keys = list(dict.fromkeys(ssh_keys or []))
+        if self.ssh_keys and "ssh" not in apps:
+            raise MigrationError("--ssh-key requires selecting the ssh app")
+        for name in self.ssh_keys:
+            if (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", name)
+                    or name in {"config", "known_hosts", "known_hosts.old", "authorized_keys"}
+                    or name.endswith((".pub", "-cert.pub"))):
+                raise MigrationError("Select an explicit SSH private-key basename, not a path or wildcard")
+            relative = ".ssh/" + name
+            self.specs["ssh"]["paths"].extend([relative, relative + ".pub"])
+            self.specs["ssh"]["files"].extend([relative, relative + ".pub"])
+        if "ssh" in apps:
+            self.specs["ssh"]["private_keys"] = [".ssh/" + name for name in self.ssh_keys]
         self.remote = bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*@[A-Za-z0-9][A-Za-z0-9_.-]*", value))
         if not self.remote and ("@" in value or ":" in value):
             raise MigrationError("Use a local snapshot HOME or USER@HOST (SSH alias for custom ports/IPv6)")
@@ -155,6 +173,9 @@ class Source:
             kind = "file" if root["path"] in self.specs[root["app"]].get("files", []) else "directory"
             if root.get("kind", "directory") != kind:
                 raise MigrationError("Unexpected source config root type")
+        for name in self.ssh_keys:
+            if ".ssh/" + name not in {root["path"] for root in roots}:
+                raise MigrationError("Selected SSH identity not found: " + name)
         if info.get("running"):
             raise MigrationError("Close selected apps on source first: " + ", ".join(info["running"]))
         self.info = info
@@ -177,7 +198,7 @@ def safe_path(home, relative, kind="directory"):
     return path
 
 
-def check_destination(home, apps, roots):
+def check_destination(home, apps, roots, ssh_keys=()):
     if home.resolve() != home or not home.is_dir() or home.stat().st_uid != os.getuid():
         raise MigrationError("Destination must be your real HOME")
     names = subprocess.check_output(["ps", "-u", str(os.getuid()), "-o", "comm="], text=True).splitlines()
@@ -185,6 +206,15 @@ def check_destination(home, apps, roots):
     busy = [app for app in apps if any(name.lower()[:15] in names for name in APPS[app]["processes"])]
     if busy:
         raise MigrationError("Close selected apps on destination first: " + ", ".join(busy))
+    if "ssh" in apps:
+        directory = safe_path(home, ".ssh")
+        if directory.exists() and directory.stat().st_uid != os.getuid():
+            raise MigrationError("SSH directory belongs to another user")
+        selected = {root["path"] for root in roots}
+        for name in ssh_keys:
+            public = ".ssh/" + name + ".pub"
+            if public not in selected and (home / public).exists():
+                raise MigrationError("Existing SSH public companion has no source counterpart; review " + public)
     for root in roots:
         path = safe_path(home, root["path"], root.get("kind", "directory"))
         if path.exists() and path.stat().st_uid != os.getuid():
@@ -237,7 +267,7 @@ def migrate(source, apps, home, dry_run=False, include_private=False, confirm=No
 
     if info["host"] == socket.gethostname() and Path(info["home"]) == home:
         raise MigrationError("Source and destination are the same HOME")
-    check_destination(home, apps, roots)
+    check_destination(home, apps, roots, source.ssh_keys)
     for root in roots:
         action = "back up and replace" if (home / root["path"]).exists() else "create"
         print(root["app"] + ": " + action + " " + root["path"])
@@ -250,6 +280,10 @@ def migrate(source, apps, home, dry_run=False, include_private=False, confirm=No
     if "opencode" in apps:
         print("OpenCode v2: global settings/definitions only; no session database, provider auth, service registration or logs.")
         print("Close OpenCode clients and its background service on both hosts before copying; no service is stopped automatically.")
+    if "ssh" in apps:
+        print("SSH: config/known_hosts and explicitly named identities only; no authorized_keys, agent sockets or other keys.")
+        if source.ssh_keys:
+            print("Private identities selected: " + ", ".join(source.ssh_keys))
     if dry_run:
         print("Read-only preview: no config contents read or copied, no apps stopped.")
         return None
@@ -258,6 +292,8 @@ def migrate(source, apps, home, dry_run=False, include_private=False, confirm=No
     if not sys.stdin.isatty():
         raise MigrationError("Real config migration needs an interactive terminal")
     phrase = "COPY " + ",".join(apps)
+    if source.ssh_keys:
+        phrase += " KEYS " + ",".join(source.ssh_keys)
     if (confirm or input)("May copy saved credentials. Type exactly " + phrase + ": ").strip() != phrase:
         raise MigrationError("Cancelled; no config contents copied")
     if not shutil.which("rsync"):
@@ -284,7 +320,14 @@ def migrate(source, apps, home, dry_run=False, include_private=False, confirm=No
         for root in roots:
             transfer(source, root["path"], staged / root["path"], batch, verify=True)
         check_source()
-        check_destination(home, apps, roots)
+        check_destination(home, apps, roots, source.ssh_keys)
+        if "ssh" in apps:
+            directory = home / ".ssh"
+            directory.mkdir(mode=0o700, exist_ok=True)
+            directory.chmod(0o700)
+            for root in roots:
+                if root["app"] == "ssh":
+                    (staged / root["path"]).chmod(0o600)
         manifest = batch / "manifest.json"
         completed = []
         manifest.write_text(json.dumps({"apps": apps, "planned": roots, "completed": completed}, indent=2) + "\n")
@@ -317,11 +360,13 @@ def main(argv=None):
     parser.add_argument("--source", required=True, help="Local snapshot HOME or USER@HOST with verified SSH")
     parser.add_argument("--apps", required=True, help=",".join(APPS))
     parser.add_argument("--ssh-control-path", help="Existing source SSH control socket")
+    parser.add_argument("--ssh-key", action="append", default=[],
+                        help="Explicit SSH identity basename to copy; repeatable, requires --apps ssh")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--include-private-configs", action="store_true")
     args = parser.parse_args(argv)
     apps = parse_apps(args.apps)
-    source = Source(args.source, apps, args.ssh_control_path)
+    source = Source(args.source, apps, args.ssh_control_path, args.ssh_key)
     migrate(source, apps, Path.home(), args.dry_run, args.include_private_configs)
     return 0
 

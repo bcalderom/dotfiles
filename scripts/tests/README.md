@@ -63,6 +63,21 @@ python3 -B scripts/system/migrate-app-configs/tests/test_migrate_app_configs.py
 
 Run that command from the repository root. No real profiles or SSH connections
 are used; real rsync integration is limited to a generated temporary HOME.
+It also covers SSH file allowlists, explicit key selection/confirmation, protected
+permissions, stale public companions and preservation of unrelated identities.
+NetBird private profiles are deliberately excluded from application migration.
+
+The NetBird helper has mocked service/SSO tests:
+
+```bash
+python3 -B scripts/network/netbird-setup/tests/test_configure_netbird.py
+```
+
+These cover preview/check isolation, explicit activation, idempotent connected
+peers, legacy socket selection, multiple-service/identity conflicts and redacted
+failures. No real VPN, SSH key or service is used. `test-setup.sh` checks that
+`--configure-netbird` is opt-in, requires `vpn`, and does not activate anything
+in preview/check; private SSH copying also requires explicit selection/consent.
 
 `test-quick-menu.sh` checks the Hyprland quick menu's Docker stop action with
 simulated Docker, systemd, Polkit, rofi, and notification commands. It does not
